@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  leaks:
+    name: Secret & identifier scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Public-repo hygiene: institutional identifiers must never appear.
+      # (Custom .gitleaks.toml with the proximity rule is pending; this grep is
+      # the interim hard block.)
+      - name: Institutional identifier check
+        run: |
+          if git grep -niE 'sesver|sesa\b|ssaver|gob\.mx|logindes' -- ':!.github/workflows/ci.yml'; then
+            echo "::error::Institutional identifier found — see public-repo hygiene rules."
+            exit 1
+          fi
+
+  build:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm build
