@@ -1,0 +1,31 @@
+/*
+ * Design tokens — single source of visual truth.
+ *
+ * These variables are the seam with the future design system (@poc/tokens).
+ * When the DS matures, this file is replaced by (or re-exports) the DS token
+ * sheet and every component in src/ui picks it up without code changes.
+ */
+:root {
+  /* surface */
+  --color-bg: #faf9f7;
+  --color-surface: #ffffff;
+  --color-border: #e5e2dc;
+
+  /* text */
+  --color-text: #1c1917;
+  --color-text-muted: #78716c;
+
+  /* brand — neutral placeholder; institutional branding is an internal overlay */
+  --color-primary: #7c2d3e;
+  --color-primary-foreground: #ffffff;
+
+  /* semantic */
+  --color-success: #166534;
+  --color-success-bg: #dcfce7;
+  --color-danger: #991b1b;
+  --color-danger-bg: #fee2e2;
+  --color-neutral-bg: #f5f5f4;
+
+  /* shape */
+  --radius: 0.5rem;
+}
