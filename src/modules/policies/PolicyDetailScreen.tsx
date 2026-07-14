@@ -12,10 +12,10 @@ import { VersionsTimeline } from "./components/VersionsTimeline";
  * Write actions (new version / activate / deactivate) land next with the
  * ETag/If-Match pattern.
  */
-export function PolicyDetailScreen({ policyId }: { policyId: string }) {
+export function PolicyDetailScreen({ app, policyId }: { app: string; policyId: string }) {
   const t = useTranslations("detail");
-  const head = usePolicy(policyId);
-  const versions = usePolicyVersions(policyId);
+  const head = usePolicy(app, policyId);
+  const versions = usePolicyVersions(app, policyId);
 
   if (head.error) {
     return (

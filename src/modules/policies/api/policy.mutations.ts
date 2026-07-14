@@ -17,8 +17,9 @@ export function useCreatePolicy() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (document: PolicyDocument) =>
-      apiPost<PolicyCreated>("policies", document, await getToken()),
+    // R026: the app is a route coordinate, not a body field.
+    mutationFn: async ({ app, document }: { app: string; document: PolicyDocument }) =>
+      apiPost<PolicyCreated>(`apps/${app}/policies`, document, await getToken()),
     onSuccess: () => {
       // The list is stale the moment the PDP accepts the write.
       queryClient.invalidateQueries({ queryKey: ["policies"] });

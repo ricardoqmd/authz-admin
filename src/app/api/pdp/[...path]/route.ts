@@ -31,8 +31,14 @@ function upstreamProblem(error: unknown) {
   throw error;
 }
 
-/** Read-only allowlist for phase 1. Writes are added with the editor. */
-const READ_PATHS = /^policies(\/[^/]+(\/versions(\/\d+)?)?)?$/;
+/**
+ * Read allowlist (R026): the cross-app catalog (`policies`) plus the nested
+ * per-app surface (`apps/{app}/policies[...]`).
+ */
+const READ_PATHS =
+  /^(policies|apps\/[a-z0-9-]+\/policies(\/[^/]+(\/versions(\/\d+)?)?)?)$/;
+/** Write allowlist: create under an app. */
+const CREATE_PATH = /^apps\/([a-z0-9-]+)\/policies$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -98,12 +104,14 @@ export async function POST(
   const { path } = await params;
   const joined = path.join("/");
 
-  if (joined !== "policies") {
+  const createMatch = CREATE_PATH.exec(joined);
+  if (!createMatch) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
     );
   }
+  const app = createMatch[1];
 
   const body = await req.json().catch(() => null);
   if (body === null) {
@@ -113,9 +121,8 @@ export async function POST(
     );
   }
 
-  // Enforcement seam (model D): the app comes from the document itself (R024,
-  // required field), and the check runs BEFORE the BFF spends its credential.
-  const app = String(body?.app ?? "");
+  // Enforcement seam (model D): since R026 the app is a ROUTE coordinate;
+  // the check runs BEFORE the BFF spends its credential.
   const allowed = await projectAccess.can(MOCK_USER, "write", app);
   if (!allowed) {
     return NextResponse.json(
@@ -131,7 +138,7 @@ export async function POST(
 
   let res: Response;
   try {
-    res = await pdpFetch("/v1/policies", {
+    res = await pdpFetch(`/v1/${joined}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),

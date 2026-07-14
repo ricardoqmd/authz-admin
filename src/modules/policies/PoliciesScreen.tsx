@@ -123,7 +123,7 @@ export function PoliciesScreen() {
                   >
                     <td className="px-4 py-2">
                       <Link
-                        href={`/policies/${p.policyId}`}
+                        href={`/policies/${p.app}/${p.policyId}`}
                         className="font-medium text-primary hover:underline"
                       >
                         {p.policyId}
@@ -157,7 +157,7 @@ export function PoliciesScreen() {
 
 function PolicyCard({ policy }: { policy: PolicyHeadSummary }) {
   return (
-    <Link href={`/policies/${policy.policyId}`} className="block">
+    <Link href={`/policies/${policy.app}/${policy.policyId}`} className="block">
       <Card className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium text-primary">{policy.policyId}</span>

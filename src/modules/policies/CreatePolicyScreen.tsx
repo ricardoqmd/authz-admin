@@ -62,8 +62,11 @@ export function CreatePolicyScreen() {
   async function onSubmit(values: CreatePolicyForm) {
     setBanner(null);
     try {
-      const created = await create.mutateAsync(toPolicyDocument(values));
-      router.push(`/policies/${created.policyId}`);
+      const created = await create.mutateAsync({
+        app: values.app,
+        document: toPolicyDocument(values),
+      });
+      router.push(`/policies/${values.app}/${created.policyId}`);
     } catch (error) {
       if (error instanceof ApiError && error.problem) {
         const { code, detail, invalidParams } = error.problem;
