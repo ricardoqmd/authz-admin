@@ -12,6 +12,10 @@ import type {
 
 export type StatusFilter = "all" | "active" | "inactive";
 
+/**
+ * Cross-app catalog (R026: GET /v1/policies) — the supervision view. Same
+ * path and filters as before R026; per-app work uses the nested routes below.
+ */
 export function usePolicies(status: StatusFilter = "all", page = 1, size = 50) {
   const { getToken } = useAuth();
   // Server-side filter (R025). Default is all — omit the param for it.
@@ -26,24 +30,25 @@ export function usePolicies(status: StatusFilter = "all", page = 1, size = 50) {
   });
 }
 
-export function usePolicy(policyId: string) {
+export function usePolicy(app: string, policyId: string) {
   const { getToken } = useAuth();
   return useQuery({
-    queryKey: ["policy", policyId],
-    queryFn: async () => apiGet<PolicyHeadView>(`policies/${policyId}`, await getToken()),
-    enabled: !!policyId,
+    queryKey: ["policy", app, policyId],
+    queryFn: async () =>
+      apiGet<PolicyHeadView>(`apps/${app}/policies/${policyId}`, await getToken()),
+    enabled: !!app && !!policyId,
   });
 }
 
-export function usePolicyVersions(policyId: string, page = 1, size = 50) {
+export function usePolicyVersions(app: string, policyId: string, page = 1, size = 50) {
   const { getToken } = useAuth();
   return useQuery({
-    queryKey: ["policy-versions", policyId, page, size],
+    queryKey: ["policy-versions", app, policyId, page, size],
     queryFn: async () =>
       apiGet<Paginated<PolicyVersionSummary>>(
-        `policies/${policyId}/versions?page=${page}&size=${size}`,
+        `apps/${app}/policies/${policyId}/versions?page=${page}&size=${size}`,
         await getToken(),
       ),
-    enabled: !!policyId,
+    enabled: !!app && !!policyId,
   });
 }

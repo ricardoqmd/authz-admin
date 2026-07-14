@@ -118,14 +118,16 @@ export interface CreatePolicyForm {
   rules: PolicyRule[];
 }
 
-/** Compose the PDP policy document from the validated form values. */
+/**
+ * Compose the PDP policy document from the validated form values.
+ * NOTE (R026): form.app is NOT part of the document — it selects the ROUTE
+ * (/v1/apps/{app}/policies). A stray `app` in the body is a 400 by design.
+ */
 export function toPolicyDocument(form: CreatePolicyForm): PolicyDocument {
   return {
     policyId: form.policyId,
     version: 1, // create is always version 1; appends bump it (R014)
-    app: form.app, // first-class scoping dimension (R024); immutable per policy
-    resourceType: form.resourceType, // clean name — prefix convention abolished
-
+    resourceType: form.resourceType,
     actions: form.actions
       .split(",")
       .map((a) => a.trim())

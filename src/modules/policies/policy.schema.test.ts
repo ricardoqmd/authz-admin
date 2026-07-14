@@ -77,9 +77,9 @@ describe("createPolicySchema", () => {
 });
 
 describe("toPolicyDocument", () => {
-  it("carries app first-class and a clean resourceType (R024)", () => {
+  it("keeps app OUT of the document — it is a route coordinate (R026)", () => {
     const doc = toPolicyDocument(VALID_FORM);
-    expect(doc.app).toBe("records");
+    expect("app" in doc).toBe(false); // a stray app in the body is a 400
     expect(doc.resourceType).toBe("document");
     expect(doc.version).toBe(1);
     expect(doc.actions).toEqual(["read", "update"]);

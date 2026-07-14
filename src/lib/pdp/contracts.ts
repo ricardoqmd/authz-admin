@@ -62,12 +62,16 @@ export interface PolicyRule {
   condition?: Condition;
 }
 
+/**
+ * The policy CONTENT (create/append body). Since R026 the app travels ONLY in
+ * the route (/v1/apps/{app}/...): sending `app` in a body is a 400 — the
+ * server rejects it even when it matches the route, so route-vs-body
+ * ambiguity is unrepresentable. Read views (below) DO carry `app`.
+ */
 export interface PolicyDocument {
   policyId: string;
   version: number;
-  /** Required since R024. A policy belongs to exactly one app; immutable. */
-  app: string;
-  /** Clean type name (e.g. "document") — the prefix convention is abolished. */
+  /** Clean type name (e.g. "document") — namespaced per app by the route. */
   resourceType: string;
   actions: string[];
   combiningAlgorithm: "DENY_OVERRIDES" | "PERMIT_OVERRIDES";
