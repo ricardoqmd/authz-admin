@@ -13,10 +13,7 @@
  */
 import type { ReactNode } from "react";
 import { MockAuthProvider, useMockAuth } from "./adapters/mock";
-import {
-  RicardoqmdAuthProvider,
-  useRicardoqmdAuth,
-} from "./adapters/ricardoqmd-auth";
+import { RicardoqmdAuthProvider, useRicardoqmdAuth } from "./adapters/ricardoqmd-auth";
 import type { AuthApi } from "./types";
 
 export type { AuthApi, SessionUser } from "./types";
@@ -55,8 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 // ADAPTER is constant for the app's lifetime, so selecting the hook at module
 // level keeps the rules of hooks intact (stable call order across renders).
-const useAdapterAuth =
-  ADAPTER === "ricardoqmd-auth" ? useRicardoqmdAuth : useMockAuth;
+const useAdapterAuth = ADAPTER === "ricardoqmd-auth" ? useRicardoqmdAuth : useMockAuth;
 
 export function useAuth(): AuthApi {
   return useAdapterAuth();

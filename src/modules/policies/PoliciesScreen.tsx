@@ -1,42 +1,44 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { projectOf, type PolicyHeadSummary } from "@/lib/pdp/contracts";
+import type { PolicyHeadSummary } from "@/lib/pdp/contracts";
 import { Badge, Button, Card, Skeleton } from "@/ui";
-import { usePolicies } from "./api/policy.queries";
+import { type StatusFilter, usePolicies } from "./api/policy.queries";
 import { StatusBadge } from "./components/StatusBadge";
+
+const STATUS_FILTERS: StatusFilter[] = ["all", "active", "inactive"];
 
 /**
  * Policies list — mobile-first: cards on small screens, table from md up.
- * Project grouping uses the `<app>:<type>` convention (projectOf) until the
- * PDP grows a first-class `app` field.
+ * App grouping uses the first-class `app` field (R024); status filtering is
+ * server-side (R025).
  */
 export function PoliciesScreen() {
+  const t = useTranslations("policies");
   const { user } = useAuth();
-  const { data, isLoading, error } = usePolicies();
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const { data, isLoading, error } = usePolicies(status);
   const [project, setProject] = useState<string>("all");
 
   const policies = data?.data ?? [];
 
   const projects = useMemo(() => {
-    const visible = new Set(policies.map(projectOf));
+    const visible = new Set(policies.map((p) => p.app));
     return ["all", ...Array.from(visible).sort()];
   }, [policies]);
 
   const filtered = useMemo(
-    () =>
-      project === "all"
-        ? policies
-        : policies.filter((p) => projectOf(p) === project),
+    () => (project === "all" ? policies : policies.filter((p) => p.app === project)),
     [policies, project],
   );
 
   if (error) {
     return (
       <Card className="border-danger-bg text-danger">
-        Could not reach the PDP: {(error as Error).message}
+        {t("loadError", { message: (error as Error).message })}
       </Card>
     );
   }
@@ -44,24 +46,44 @@ export function PoliciesScreen() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Policies</h1>
-        <span className="text-sm text-muted">
-          {user?.name} · {filtered.length} policies
-        </span>
+        <h1 className="text-xl font-semibold">{t("title")}</h1>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-sm text-muted sm:inline">
+            {user?.name} · {t("count", { count: filtered.length })}
+          </span>
+          <Link href="/policies/new">
+            <Button>{t("newPolicy")}</Button>
+          </Link>
+        </div>
       </div>
 
-      {/* project filter — becomes the persistent project selector later */}
-      <div className="flex flex-wrap gap-2">
-        {projects.map((p) => (
-          <Button
-            key={p}
-            variant={p === project ? "primary" : "outline"}
-            className="h-8 px-3"
-            onClick={() => setProject(p)}
-          >
-            {p}
-          </Button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* app filter — becomes the persistent app selector later */}
+        <div className="flex flex-wrap gap-2">
+          {projects.map((p) => (
+            <Button
+              key={p}
+              variant={p === project ? "primary" : "outline"}
+              className="h-8 px-3"
+              onClick={() => setProject(p)}
+            >
+              {p === "all" ? t("filterAll") : p}
+            </Button>
+          ))}
+        </div>
+        {/* status filter — server-side (R025) */}
+        <div className="flex gap-1 rounded border border-line bg-surface p-0.5">
+          {STATUS_FILTERS.map((sf) => (
+            <Button
+              key={sf}
+              variant={sf === status ? "primary" : "ghost"}
+              className="h-7 px-2 text-xs"
+              onClick={() => setStatus(sf)}
+            >
+              {t(`statusFilter.${sf}`)}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {isLoading ? (
@@ -86,26 +108,37 @@ export function PoliciesScreen() {
             <table className="w-full bg-surface text-sm">
               <thead className="border-b border-line text-left text-muted">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Policy</th>
-                  <th className="px-4 py-2 font-medium">Project</th>
-                  <th className="px-4 py-2 font-medium">Resource type</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Last change</th>
+                  <th className="px-4 py-2 font-medium">{t("table.policy")}</th>
+                  <th className="px-4 py-2 font-medium">{t("table.project")}</th>
+                  <th className="px-4 py-2 font-medium">{t("table.resourceType")}</th>
+                  <th className="px-4 py-2 font-medium">{t("table.status")}</th>
+                  <th className="px-4 py-2 font-medium">{t("table.lastChange")}</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((p) => (
-                  <tr key={p.policyId} className="border-b border-line last:border-0 hover:bg-neutral-bg">
+                  <tr
+                    key={p.policyId}
+                    className="border-b border-line last:border-0 hover:bg-neutral-bg"
+                  >
                     <td className="px-4 py-2">
-                      <Link href={`/policies/${p.policyId}`} className="font-medium text-primary hover:underline">
+                      <Link
+                        href={`/policies/${p.policyId}`}
+                        className="font-medium text-primary hover:underline"
+                      >
                         {p.policyId}
                       </Link>
                     </td>
-                    <td className="px-4 py-2"><Badge>{projectOf(p)}</Badge></td>
+                    <td className="px-4 py-2">
+                      <Badge>{p.app}</Badge>
+                    </td>
                     <td className="px-4 py-2 font-mono text-xs">{p.resourceType}</td>
-                    <td className="px-4 py-2"><StatusBadge activeVersion={p.activeVersion} /></td>
+                    <td className="px-4 py-2">
+                      <StatusBadge activeVersion={p.activeVersion} />
+                    </td>
                     <td className="px-4 py-2 text-muted">
-                      {p.audit.createdBy} · {new Date(p.audit.createdAt).toLocaleDateString()}
+                      {p.audit.createdBy} ·{" "}
+                      {new Date(p.audit.createdAt).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}
@@ -114,9 +147,7 @@ export function PoliciesScreen() {
           </div>
 
           {filtered.length === 0 && (
-            <Card className="text-center text-muted">
-              No policies yet. Create one against the PDP (see lifecycle-walkthrough.http) and refresh.
-            </Card>
+            <Card className="text-center text-muted">{t("empty")}</Card>
           )}
         </>
       )}
@@ -133,11 +164,12 @@ function PolicyCard({ policy }: { policy: PolicyHeadSummary }) {
           <StatusBadge activeVersion={policy.activeVersion} />
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
-          <Badge>{projectOf(policy)}</Badge>
+          <Badge>{policy.app}</Badge>
           <span className="font-mono">{policy.resourceType}</span>
         </div>
         <p className="text-xs text-muted">
-          {policy.audit.createdBy} · {new Date(policy.audit.createdAt).toLocaleDateString()}
+          {policy.audit.createdBy} ·{" "}
+          {new Date(policy.audit.createdAt).toLocaleDateString()}
         </p>
       </Card>
     </Link>

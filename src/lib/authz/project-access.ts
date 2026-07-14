@@ -40,5 +40,4 @@ export class HardcodedProjectAccessPolicy implements ProjectAccessPolicy {
 // TODO(phase 2): EvaluateProjectAccessPolicy — calls the PDP /v1/evaluate with
 // the BFF service credential (authz-admin + pdp-client markers) and the
 // seeded meta-policy. See docs in CONTEXT-pap.
-export const projectAccess: ProjectAccessPolicy =
-  new HardcodedProjectAccessPolicy();
+export const projectAccess: ProjectAccessPolicy = new HardcodedProjectAccessPolicy();

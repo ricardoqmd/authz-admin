@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type { PolicyVersionSummary } from "@/lib/pdp/contracts";
 import { Badge, Card } from "@/ui";
 
@@ -12,6 +13,7 @@ export function VersionsTimeline({
   versions: PolicyVersionSummary[];
   activeVersion: number | null;
 }) {
+  const t = useTranslations("status");
   const sorted = [...versions].sort((a, b) => b.version - a.version);
 
   return (
@@ -23,17 +25,14 @@ export function VersionsTimeline({
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium">v{v.version}</span>
               {v.version === activeVersion && (
-                <Badge tone="success">in production</Badge>
+                <Badge tone="success">{t("inProduction")}</Badge>
               )}
             </div>
             <p className="text-xs text-muted">
-              {v.audit.createdBy} ·{" "}
-              {new Date(v.audit.createdAt).toLocaleString()}
+              {v.audit.createdBy} · {new Date(v.audit.createdAt).toLocaleString()}
             </p>
             {v.audit.changeReason && (
-              <p className="text-xs italic text-muted">
-                “{v.audit.changeReason}”
-              </p>
+              <p className="text-xs italic text-muted">“{v.audit.changeReason}”</p>
             )}
           </Card>
         </li>

@@ -11,9 +11,25 @@
  * The seams (steps 1–2) are in place so phase 2 swaps implementations, not
  * structure.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { projectAccess } from "@/lib/authz/project-access";
-import { pdpFetch } from "@/lib/pdp/server";
+import { pdpFetch, UpstreamError } from "@/lib/pdp/server";
+
+/** Upstream failures become problem+json the UI can render — never a hang. */
+function upstreamProblem(error: unknown) {
+  if (error instanceof UpstreamError) {
+    return NextResponse.json(
+      {
+        title: "Upstream unavailable",
+        status: 504,
+        code: "UPSTREAM_UNAVAILABLE",
+        detail: error.message,
+      },
+      { status: 504 },
+    );
+  }
+  throw error;
+}
 
 /** Read-only allowlist for phase 1. Writes are added with the editor. */
 const READ_PATHS = /^policies(\/[^/]+(\/versions(\/\d+)?)?)?$/;
@@ -52,14 +68,85 @@ export async function GET(
   }
 
   const search = req.nextUrl.search;
-  const res = await pdpFetch(`/v1/${joined}${search}`);
+  let res: Response;
+  try {
+    res = await pdpFetch(`/v1/${joined}${search}`);
+  } catch (error) {
+    return upstreamProblem(error);
+  }
   const body = await res.text();
+  const etag = res.headers.get("etag");
 
   return new NextResponse(body, {
     status: res.status,
     headers: {
       "content-type": res.headers.get("content-type") ?? "application/json",
-      ...(res.headers.get("etag") ? { etag: res.headers.get("etag")! } : {}),
+      ...(etag ? { etag } : {}),
+    },
+  });
+}
+
+/**
+ * Phase 2, first write: policy creation. Create is the only unconditional
+ * write (no If-Match — there is no prior ETag); the conditional writes
+ * (PUT / activate / deactivate) arrive with their own reload-and-retry UX.
+ */
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  const joined = path.join("/");
+
+  if (joined !== "policies") {
+    return NextResponse.json(
+      { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
+      { status: 404 },
+    );
+  }
+
+  const body = await req.json().catch(() => null);
+  if (body === null) {
+    return NextResponse.json(
+      { title: "Bad request", status: 400, code: "BFF_INVALID_JSON" },
+      { status: 400 },
+    );
+  }
+
+  // Enforcement seam (model D): the app comes from the document itself (R024,
+  // required field), and the check runs BEFORE the BFF spends its credential.
+  const app = String(body?.app ?? "");
+  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        title: "Forbidden",
+        status: 403,
+        code: "PROJECT_ACCESS_DENIED",
+        detail: `You have no write access to project "${app}".`,
+      },
+      { status: 403 },
+    );
+  }
+
+  let res: Response;
+  try {
+    res = await pdpFetch("/v1/policies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return upstreamProblem(error);
+  }
+  const text = await res.text();
+  const etag = res.headers.get("etag");
+
+  return new NextResponse(text, {
+    status: res.status,
+    headers: {
+      "content-type": res.headers.get("content-type") ?? "application/json",
+      ...(etag ? { etag } : {}),
     },
   });
 }

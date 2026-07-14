@@ -19,19 +19,20 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  function Button({ className, variant = "primary", ...props }, ref) {
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          "inline-flex h-9 items-center justify-center gap-2 rounded px-4 text-sm font-medium",
-          "transition-colors disabled:pointer-events-none disabled:opacity-50",
-          variants[variant],
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
-);
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { className, variant = "primary", ...props },
+  ref,
+) {
+  return (
+    <button
+      ref={ref}
+      className={cn(
+        "inline-flex h-9 items-center justify-center gap-2 rounded px-4 text-sm font-medium",
+        "transition-colors disabled:pointer-events-none disabled:opacity-50",
+        variants[variant],
+        className,
+      )}
+      {...props}
+    />
+  );
+});

@@ -1,0 +1,101 @@
+{
+  "shell": {
+    "appName": "PAP",
+    "appSubtitle": "Authz Admin"
+  },
+  "policies": {
+    "title": "Policies",
+    "count": "{count, plural, one {# policy} other {# policies}}",
+    "newPolicy": "New policy",
+    "filterAll": "all",
+    "table": {
+      "policy": "Policy",
+      "project": "Project",
+      "resourceType": "Resource type",
+      "status": "Status",
+      "lastChange": "Last change"
+    },
+    "empty": "No policies yet. Create one with \"New policy\".",
+    "loadError": "Could not reach the PDP: {message}",
+    "statusFilter": {
+      "all": "All",
+      "active": "Active",
+      "inactive": "Inactive"
+    }
+  },
+  "status": {
+    "active": "active · v{version}",
+    "inactive": "inactive",
+    "inProduction": "in production"
+  },
+  "detail": {
+    "back": "Policies",
+    "revision": "revision {revision}",
+    "activeDocument": "Active document (v{version})",
+    "versionHistory": "Version history"
+  },
+  "create": {
+    "title": "New policy",
+    "intro": "The policy is created <b>inactive</b> (version 1). Putting it in production is a separate, explicit activation step.",
+    "pdpRejected": "The PDP rejected the policy document:",
+    "duplicateId": "A policy with this id already exists.",
+    "fields": {
+      "policyId": "Policy id",
+      "policyIdHint": "Unique, kebab-case.",
+      "project": "Project",
+      "projectHint": "Owning application. A policy belongs to exactly one.",
+      "resourceType": "Resource type",
+      "resourceTypeHint": "Clean type name (e.g. document) — each app has its own namespace.",
+      "actions": "Actions",
+      "actionsHint": "Comma-separated verbs, or \"*\" for all (e.g. read, update).",
+      "combiningAlgorithm": "Combining algorithm",
+      "denyOverrides": "DENY_OVERRIDES (safe default)",
+      "permitOverrides": "PERMIT_OVERRIDES",
+      "defaultEffect": "Default effect",
+      "denyFailSafe": "DENY (fail-safe)",
+      "permit": "PERMIT"
+    },
+    "cancel": "Cancel",
+    "submit": "Create (inactive)",
+    "submitting": "Creating…"
+  },
+  "rules": {
+    "title": "Rules",
+    "addRule": "Add rule",
+    "removeRule": "Remove rule",
+    "rule": "Rule {index}",
+    "ruleId": "Rule id",
+    "effect": "Effect",
+    "permit": "PERMIT",
+    "deny": "DENY",
+    "conditions": "Conditions (all must hold)",
+    "addCondition": "Add condition",
+    "removeCondition": "Remove",
+    "noConditions": "No conditions — the rule always applies.",
+    "left": "Attribute",
+    "operator": "Operator",
+    "rightType": "Compare with",
+    "reference": "attribute",
+    "literal": "value",
+    "rightValue": "Value",
+    "literalHint": "Numbers and true/false are typed automatically; anything else is text.",
+    "orderingNeedsNumber": "Ordering operators (GT/GTE/LT/LTE) require a numeric value (ADR-023).",
+    "builderMode": "Builder",
+    "jsonMode": "JSON",
+    "advancedJson": "This document uses advanced structures (or/nested groups) — edit it as JSON.",
+    "invalidJson": "Invalid JSON — fix it before switching back to the builder.",
+    "jsonHint": "Full rules array. Switching back to the builder requires builder-compatible structures."
+  },
+  "validation": {
+    "required": "Required",
+    "kebabCase": "Lowercase kebab-case (e.g. doc-access)",
+    "lowercaseId": "Lowercase letters, digits, hyphens",
+    "actionsFormat": "Comma-separated verbs, or * for all",
+    "rulesArray": "Must be a JSON array of rules",
+    "invalidJson": "Invalid JSON"
+  },
+  "locale": {
+    "es": "ES",
+    "en": "EN"
+  }
+}

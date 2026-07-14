@@ -10,13 +10,17 @@ import type {
   PolicyVersionSummary,
 } from "@/lib/pdp/contracts";
 
-export function usePolicies(page = 1, size = 50) {
+export type StatusFilter = "all" | "active" | "inactive";
+
+export function usePolicies(status: StatusFilter = "all", page = 1, size = 50) {
   const { getToken } = useAuth();
+  // Server-side filter (R025). Default is all — omit the param for it.
+  const statusParam = status === "all" ? "" : `&status=${status}`;
   return useQuery({
-    queryKey: ["policies", page, size],
+    queryKey: ["policies", status, page, size],
     queryFn: async () =>
       apiGet<Paginated<PolicyHeadSummary>>(
-        `policies?page=${page}&size=${size}`,
+        `policies?page=${page}&size=${size}${statusParam}`,
         await getToken(),
       ),
   });
@@ -26,8 +30,7 @@ export function usePolicy(policyId: string) {
   const { getToken } = useAuth();
   return useQuery({
     queryKey: ["policy", policyId],
-    queryFn: async () =>
-      apiGet<PolicyHeadView>(`policies/${policyId}`, await getToken()),
+    queryFn: async () => apiGet<PolicyHeadView>(`policies/${policyId}`, await getToken()),
     enabled: !!policyId,
   });
 }
