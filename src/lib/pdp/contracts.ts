@@ -14,6 +14,8 @@ export interface AuditView {
 
 export interface PolicyHeadSummary {
   policyId: string;
+  /** Owning application — first-class scoping dimension (R024). */
+  app: string;
   resourceType: string;
   /** null while the policy is inactive. */
   activeVersion: number | null;
@@ -29,6 +31,7 @@ export interface PolicyHeadView extends PolicyHeadSummary {
 export interface PolicyVersionSummary {
   policyId: string;
   version: number;
+  app: string;
   resourceType: string;
   audit: AuditView;
 }
@@ -45,15 +48,7 @@ export interface Paginated<T> {
 
 /* ---- policy document (what the editor will build in phase 2) ---- */
 
-export type ComparisonOp =
-  | "EQ"
-  | "NEQ"
-  | "IN"
-  | "NOT_IN"
-  | "GT"
-  | "GTE"
-  | "LT"
-  | "LTE";
+export type ComparisonOp = "EQ" | "NEQ" | "IN" | "NOT_IN" | "GT" | "GTE" | "LT" | "LTE";
 
 export type Operand = { ref: string } | { value: unknown };
 
@@ -70,6 +65,9 @@ export interface PolicyRule {
 export interface PolicyDocument {
   policyId: string;
   version: number;
+  /** Required since R024. A policy belongs to exactly one app; immutable. */
+  app: string;
+  /** Clean type name (e.g. "document") — the prefix convention is abolished. */
   resourceType: string;
   actions: string[];
   combiningAlgorithm: "DENY_OVERRIDES" | "PERMIT_OVERRIDES";
@@ -91,19 +89,6 @@ export interface Problem {
 
 export function isProblem(value: unknown): value is Problem {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "status" in value &&
-    "code" in value
+    typeof value === "object" && value !== null && "status" in value && "code" in value
   );
-}
-
-/**
- * The project a policy belongs to, derived from the `<app>:<type>` naming
- * convention on resourceType. Falls back to "unassigned" until the PDP gains
- * a first-class `app` field (planned additive change).
- */
-export function projectOf(policy: { resourceType: string }): string {
-  const idx = policy.resourceType.indexOf(":");
-  return idx > 0 ? policy.resourceType.slice(0, idx) : "unassigned";
 }

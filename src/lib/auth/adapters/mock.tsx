@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import type { AuthApi, SessionUser } from "../types";
 
 /**
@@ -25,9 +25,7 @@ const api: AuthApi = {
 const MockAuthContext = createContext<AuthApi>(api);
 
 export function MockAuthProvider({ children }: { children: ReactNode }) {
-  return (
-    <MockAuthContext.Provider value={api}>{children}</MockAuthContext.Provider>
-  );
+  return <MockAuthContext.Provider value={api}>{children}</MockAuthContext.Provider>;
 }
 
 export function useMockAuth(): AuthApi {

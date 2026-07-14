@@ -1,0 +1,101 @@
+{
+  "shell": {
+    "appName": "PAP",
+    "appSubtitle": "Authz Admin"
+  },
+  "policies": {
+    "title": "Políticas",
+    "count": "{count, plural, one {# política} other {# políticas}}",
+    "newPolicy": "Nueva política",
+    "filterAll": "todas",
+    "table": {
+      "policy": "Política",
+      "project": "Proyecto",
+      "resourceType": "Tipo de recurso",
+      "status": "Estado",
+      "lastChange": "Último cambio"
+    },
+    "empty": "Aún no hay políticas. Crea una con \"Nueva política\".",
+    "loadError": "No se pudo contactar al PDP: {message}",
+    "statusFilter": {
+      "all": "Todas",
+      "active": "Activas",
+      "inactive": "Inactivas"
+    }
+  },
+  "status": {
+    "active": "activa · v{version}",
+    "inactive": "inactiva",
+    "inProduction": "en producción"
+  },
+  "detail": {
+    "back": "Políticas",
+    "revision": "revisión {revision}",
+    "activeDocument": "Documento activo (v{version})",
+    "versionHistory": "Historial de versiones"
+  },
+  "create": {
+    "title": "Nueva política",
+    "intro": "La política se crea <b>inactiva</b> (versión 1). Ponerla en producción es un paso de activación explícito y separado.",
+    "pdpRejected": "El PDP rechazó el documento de política:",
+    "duplicateId": "Ya existe una política con este id.",
+    "fields": {
+      "policyId": "Id de la política",
+      "policyIdHint": "Único, en kebab-case.",
+      "project": "Proyecto",
+      "projectHint": "Aplicación propietaria. Una política pertenece a exactamente una.",
+      "resourceType": "Tipo de recurso",
+      "resourceTypeHint": "Nombre de tipo limpio (p. ej. document) — cada app tiene su propio namespace.",
+      "actions": "Acciones",
+      "actionsHint": "Verbos separados por coma, o \"*\" para todos (p. ej. read, update).",
+      "combiningAlgorithm": "Algoritmo de combinación",
+      "denyOverrides": "DENY_OVERRIDES (default seguro)",
+      "permitOverrides": "PERMIT_OVERRIDES",
+      "defaultEffect": "Efecto por defecto",
+      "denyFailSafe": "DENY (fail-safe)",
+      "permit": "PERMIT"
+    },
+    "cancel": "Cancelar",
+    "submit": "Crear (inactiva)",
+    "submitting": "Creando…"
+  },
+  "rules": {
+    "title": "Reglas",
+    "addRule": "Agregar regla",
+    "removeRule": "Quitar regla",
+    "rule": "Regla {index}",
+    "ruleId": "Id de la regla",
+    "effect": "Efecto",
+    "permit": "PERMIT",
+    "deny": "DENY",
+    "conditions": "Condiciones (todas deben cumplirse)",
+    "addCondition": "Agregar condición",
+    "removeCondition": "Quitar",
+    "noConditions": "Sin condiciones — la regla siempre aplica.",
+    "left": "Atributo",
+    "operator": "Operador",
+    "rightType": "Comparar con",
+    "reference": "atributo",
+    "literal": "valor",
+    "rightValue": "Valor",
+    "literalHint": "Números y true/false se tipan solos; lo demás es texto.",
+    "orderingNeedsNumber": "Los operadores de orden (GT/GTE/LT/LTE) requieren un valor numérico (ADR-023).",
+    "builderMode": "Constructor",
+    "jsonMode": "JSON",
+    "advancedJson": "Este documento usa estructuras avanzadas (or/grupos anidados) — edítalo como JSON.",
+    "invalidJson": "JSON inválido — corrígelo antes de volver al constructor.",
+    "jsonHint": "Arreglo completo de reglas. Volver al constructor requiere estructuras compatibles."
+  },
+  "validation": {
+    "required": "Requerido",
+    "kebabCase": "Kebab-case en minúsculas (p. ej. doc-access)",
+    "lowercaseId": "Minúsculas, dígitos y guiones",
+    "actionsFormat": "Verbos separados por coma, o * para todos",
+    "rulesArray": "Debe ser un arreglo JSON de reglas",
+    "invalidJson": "JSON inválido"
+  },
+  "locale": {
+    "es": "ES",
+    "en": "EN"
+  }
+}

@@ -23,3 +23,23 @@ export async function apiGet<T>(path: string, token: string | null): Promise<T> 
   }
   return (await res.json()) as T;
 }
+
+export async function apiPost<T>(
+  path: string,
+  body: unknown,
+  token: string | null,
+): Promise<T> {
+  const res = await fetch(`/api/pdp/${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new ApiError(res.status, isProblem(payload) ? payload : null);
+  }
+  return (await res.json()) as T;
+}

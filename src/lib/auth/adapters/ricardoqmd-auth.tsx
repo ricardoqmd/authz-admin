@@ -1,5 +1,10 @@
 "use client";
 
+import { createKeycloakProvider } from "@ricardoqmd/auth-keycloak";
+import {
+  AuthProvider as CoreAuthProvider,
+  useAuth as useCoreAuth,
+} from "@ricardoqmd/auth-nextjs";
 /*
  * Reference adapter: @ricardoqmd/auth-nextjs + @ricardoqmd/auth-keycloak
  * (Keycloak 26 via the auth-core XState machine).
@@ -15,11 +20,6 @@
  *   apps  ← "authz_apps" claim (group-populated in Keycloak; see ADR P001)
  */
 import type { ReactNode } from "react";
-import { createKeycloakProvider } from "@ricardoqmd/auth-keycloak";
-import {
-  AuthProvider as CoreAuthProvider,
-  useAuth as useCoreAuth,
-} from "@ricardoqmd/auth-nextjs";
 import type { AuthApi, SessionUser } from "../types";
 
 /**
@@ -32,10 +32,18 @@ let provider: ReturnType<typeof createKeycloakProvider> | null = null;
 
 function getProvider() {
   provider ??= createKeycloakProvider({
+    // Authorization Code + PKCE — the right flow for a public SPA client.
+    pkceMethod: "S256",
     config: {
       url: requiredEnv("NEXT_PUBLIC_KEYCLOAK_URL", process.env.NEXT_PUBLIC_KEYCLOAK_URL),
-      realm: requiredEnv("NEXT_PUBLIC_KEYCLOAK_REALM", process.env.NEXT_PUBLIC_KEYCLOAK_REALM),
-      clientId: requiredEnv("NEXT_PUBLIC_KEYCLOAK_CLIENT_ID", process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID),
+      realm: requiredEnv(
+        "NEXT_PUBLIC_KEYCLOAK_REALM",
+        process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
+      ),
+      clientId: requiredEnv(
+        "NEXT_PUBLIC_KEYCLOAK_CLIENT_ID",
+        process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
+      ),
     },
   });
   return provider;
@@ -44,17 +52,13 @@ function getProvider() {
 /** Fail-fast config validation (same philosophy as the PDP's startup check). */
 function requiredEnv(name: string, value: string | undefined): string {
   if (!value) {
-    throw new Error(
-      `${name} is required when NEXT_PUBLIC_AUTH_ADAPTER=ricardoqmd-auth`,
-    );
+    throw new Error(`${name} is required when NEXT_PUBLIC_AUTH_ADAPTER=ricardoqmd-auth`);
   }
   return value;
 }
 
 export function RicardoqmdAuthProvider({ children }: { children: ReactNode }) {
-  return (
-    <CoreAuthProvider provider={getProvider()}>{children}</CoreAuthProvider>
-  );
+  return <CoreAuthProvider provider={getProvider()}>{children}</CoreAuthProvider>;
 }
 
 /** Claims beyond the normalized set; the PAP only cares about authz_apps. */
