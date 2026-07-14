@@ -28,12 +28,15 @@ export async function apiPost<T>(
   path: string,
   body: unknown,
   token: string | null,
+  options?: { ifMatch?: string },
 ): Promise<T> {
   const res = await fetch(`/api/pdp/${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // Conditional writes (R018): the ETag equals the head revision.
+      ...(options?.ifMatch ? { "If-Match": options.ifMatch } : {}),
     },
     body: JSON.stringify(body),
   });

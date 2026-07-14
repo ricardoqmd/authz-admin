@@ -97,5 +97,26 @@
   "locale": {
     "es": "ES",
     "en": "EN"
+  },
+  "lifecycle": {
+    "activate": "Activar",
+    "changeActiveVersion": "Cambiar versión activa",
+    "deactivate": "Desactivar",
+    "activateTitle": "Activar {policyId}",
+    "activateIntro": "Elige qué versión va a producción. Solo esa versión se evaluará.",
+    "deactivateTitle": "Desactivar {policyId}",
+    "deactivateIntro": "La versión {version} se retira de producción. El historial se conserva; no se borra nada.",
+    "version": "Versión",
+    "current": "actual",
+    "changeReason": "Motivo del cambio",
+    "changeReasonHint": "Se registra en la bitácora de auditoría.",
+    "changeReasonPlaceholder": "p. ej. go live con area-scope",
+    "cancel": "Cancelar",
+    "confirmActivate": "Poner v{version} en producción",
+    "activating": "Activando…",
+    "confirmDeactivate": "Retirar de producción",
+    "deactivating": "Desactivando…",
+    "staleRevision": "Otro admin cambió esta política mientras estabas aquí. Recarga para traer la última versión y reintenta — tu captura se conserva.",
+    "reloadAndRetry": "Recargar"
   }
 }

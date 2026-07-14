@@ -97,7 +97,7 @@ export function PoliciesScreen() {
           {/* mobile: cards */}
           <ul className="space-y-2 md:hidden">
             {filtered.map((p) => (
-              <li key={p.policyId}>
+              <li key={`${p.app}/${p.policyId}`}>
                 <PolicyCard policy={p} />
               </li>
             ))}
@@ -118,7 +118,7 @@ export function PoliciesScreen() {
               <tbody>
                 {filtered.map((p) => (
                   <tr
-                    key={p.policyId}
+                    key={`${p.app}/${p.policyId}`}
                     className="border-b border-line last:border-0 hover:bg-neutral-bg"
                   >
                     <td className="px-4 py-2">

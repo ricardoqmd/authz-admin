@@ -37,8 +37,12 @@ function upstreamProblem(error: unknown) {
  */
 const READ_PATHS =
   /^(policies|apps\/[a-z0-9-]+\/policies(\/[^/]+(\/versions(\/\d+)?)?)?)$/;
-/** Write allowlist: create under an app. */
-const CREATE_PATH = /^apps\/([a-z0-9-]+)\/policies$/;
+/**
+ * Write allowlist: create, activate and deactivate under an app. The second
+ * capture (lifecycle verb) doubles as the ProjectAccessPolicy action.
+ */
+const WRITE_PATH =
+  /^apps\/([a-z0-9-]+)\/policies(?:\/[a-z0-9-]+\/(activate|deactivate))?$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -104,14 +108,15 @@ export async function POST(
   const { path } = await params;
   const joined = path.join("/");
 
-  const createMatch = CREATE_PATH.exec(joined);
-  if (!createMatch) {
+  const writeMatch = WRITE_PATH.exec(joined);
+  if (!writeMatch) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
     );
   }
-  const app = createMatch[1];
+  const app = writeMatch[1];
+  const action = (writeMatch[2] ?? "write") as "write" | "activate" | "deactivate";
 
   const body = await req.json().catch(() => null);
   if (body === null) {
@@ -123,7 +128,7 @@ export async function POST(
 
   // Enforcement seam (model D): since R026 the app is a ROUTE coordinate;
   // the check runs BEFORE the BFF spends its credential.
-  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  const allowed = await projectAccess.can(MOCK_USER, action, app);
   if (!allowed) {
     return NextResponse.json(
       {
@@ -136,11 +141,17 @@ export async function POST(
     );
   }
 
+  // Conditional writes (R018): forward the client's If-Match untouched so the
+  // PDP arbitrates concurrency — the BFF never fabricates preconditions.
+  const ifMatch = req.headers.get("if-match");
   let res: Response;
   try {
     res = await pdpFetch(`/v1/${joined}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(ifMatch ? { "If-Match": ifMatch } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch (error) {

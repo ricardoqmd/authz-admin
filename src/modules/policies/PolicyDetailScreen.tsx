@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Badge, Card, Skeleton } from "@/ui";
 import { usePolicy, usePolicyVersions } from "./api/policy.queries";
+import { LifecycleActions } from "./components/LifecycleActions";
 import { StatusBadge } from "./components/StatusBadge";
 import { VersionsTimeline } from "./components/VersionsTimeline";
 
@@ -44,6 +45,16 @@ export function PolicyDetailScreen({ app, policyId }: { app: string; policyId: s
             <span className="font-mono">{head.data.resourceType}</span>
             <span>· {t("revision", { revision: head.data.revision })}</span>
           </div>
+          {versions.data && (
+            <LifecycleActions
+              head={head.data}
+              versions={versions.data.data}
+              onReload={() => {
+                head.refetch();
+                versions.refetch();
+              }}
+            />
+          )}
           {head.data.activeContent && (
             <details>
               <summary className="cursor-pointer text-sm text-primary">
