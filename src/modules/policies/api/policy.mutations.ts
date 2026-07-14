@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { apiPost } from "@/lib/pdp/client";
-import type { PolicyDocument } from "@/lib/pdp/contracts";
+import type { PolicyDocument, PolicyHeadView } from "@/lib/pdp/contracts";
 
 /** Response of POST /v1/policies (PolicyCreated). */
 export interface PolicyCreated {
@@ -25,4 +25,53 @@ export function useCreatePolicy() {
       queryClient.invalidateQueries({ queryKey: ["policies"] });
     },
   });
+}
+
+/**
+ * Conditional lifecycle writes (R018/R020): If-Match carries the head revision
+ * read by the caller. A 412 means another admin moved the head — the UI
+ * reloads the head (fresh revision) and retries without losing input.
+ */
+export function useActivatePolicy(app: string, policyId: string) {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      version: number;
+      changeReason: string;
+      revision: number;
+    }) =>
+      apiPost<PolicyHeadView>(
+        `apps/${app}/policies/${policyId}/activate`,
+        { version: input.version, changeReason: input.changeReason },
+        await getToken(),
+        { ifMatch: `"${input.revision}"` },
+      ),
+    onSuccess: () => invalidatePolicy(queryClient, app, policyId),
+  });
+}
+
+export function useDeactivatePolicy(app: string, policyId: string) {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { changeReason: string; revision: number }) =>
+      apiPost<PolicyHeadView>(
+        `apps/${app}/policies/${policyId}/deactivate`,
+        { changeReason: input.changeReason },
+        await getToken(),
+        { ifMatch: `"${input.revision}"` },
+      ),
+    onSuccess: () => invalidatePolicy(queryClient, app, policyId),
+  });
+}
+
+import type { QueryClient } from "@tanstack/react-query";
+
+function invalidatePolicy(queryClient: QueryClient, app: string, policyId: string) {
+  queryClient.invalidateQueries({ queryKey: ["policy", app, policyId] });
+  queryClient.invalidateQueries({ queryKey: ["policy-versions", app, policyId] });
+  queryClient.invalidateQueries({ queryKey: ["policies"] });
 }

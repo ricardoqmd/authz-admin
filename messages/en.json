@@ -97,5 +97,26 @@
   "locale": {
     "es": "ES",
     "en": "EN"
+  },
+  "lifecycle": {
+    "activate": "Activate",
+    "changeActiveVersion": "Change active version",
+    "deactivate": "Deactivate",
+    "activateTitle": "Activate {policyId}",
+    "activateIntro": "Choose which version goes to production. Only this version will be evaluated.",
+    "deactivateTitle": "Deactivate {policyId}",
+    "deactivateIntro": "Version {version} will be retired from production. History is preserved; nothing is deleted.",
+    "version": "Version",
+    "current": "current",
+    "changeReason": "Change reason",
+    "changeReasonHint": "Recorded in the audit log.",
+    "changeReasonPlaceholder": "e.g. go live with area-scope",
+    "cancel": "Cancel",
+    "confirmActivate": "Put v{version} in production",
+    "activating": "Activating…",
+    "confirmDeactivate": "Retire from production",
+    "deactivating": "Deactivating…",
+    "staleRevision": "Another admin changed this policy while you were here. Reload to get the latest version, then retry — your input is kept.",
+    "reloadAndRetry": "Reload"
   }
 }
