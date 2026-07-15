@@ -24,14 +24,15 @@ export async function apiGet<T>(path: string, token: string | null): Promise<T> 
   return (await res.json()) as T;
 }
 
-export async function apiPost<T>(
+async function apiWrite<T>(
+  method: "POST" | "PUT",
   path: string,
   body: unknown,
   token: string | null,
   options?: { ifMatch?: string },
 ): Promise<T> {
   const res = await fetch(`/api/pdp/${path}`, {
-    method: "POST",
+    method,
     headers: {
       "content-type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -45,4 +46,22 @@ export async function apiPost<T>(
     throw new ApiError(res.status, isProblem(payload) ? payload : null);
   }
   return (await res.json()) as T;
+}
+
+export function apiPost<T>(
+  path: string,
+  body: unknown,
+  token: string | null,
+  options?: { ifMatch?: string },
+): Promise<T> {
+  return apiWrite<T>("POST", path, body, token, options);
+}
+
+export function apiPut<T>(
+  path: string,
+  body: unknown,
+  token: string | null,
+  options?: { ifMatch?: string },
+): Promise<T> {
+  return apiWrite<T>("PUT", path, body, token, options);
 }

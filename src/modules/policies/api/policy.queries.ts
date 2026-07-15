@@ -8,6 +8,7 @@ import type {
   PolicyHeadSummary,
   PolicyHeadView,
   PolicyVersionSummary,
+  PolicyVersionView,
 } from "@/lib/pdp/contracts";
 
 export type StatusFilter = "all" | "active" | "inactive";
@@ -50,5 +51,19 @@ export function usePolicyVersions(app: string, policyId: string, page = 1, size 
         await getToken(),
       ),
     enabled: !!app && !!policyId,
+  });
+}
+
+/** A single immutable version with its full content — the edit form prefill source. */
+export function usePolicyVersion(app: string, policyId: string, version: number | null) {
+  const { getToken } = useAuth();
+  return useQuery({
+    queryKey: ["policy-version", app, policyId, version],
+    queryFn: async () =>
+      apiGet<PolicyVersionView>(
+        `apps/${app}/policies/${policyId}/versions/${version}`,
+        await getToken(),
+      ),
+    enabled: !!app && !!policyId && version != null,
   });
 }

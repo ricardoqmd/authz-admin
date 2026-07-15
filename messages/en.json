@@ -117,6 +117,18 @@
     "confirmDeactivate": "Retire from production",
     "deactivating": "Deactivating…",
     "staleRevision": "Another admin changed this policy while you were here. Reload to get the latest version, then retry — your input is kept.",
-    "reloadAndRetry": "Reload"
+    "reloadAndRetry": "Reload",
+    "newVersion": "New version"
+  },
+  "edit": {
+    "title": "Edit policy — new version",
+    "intro": "Editing appends a new immutable version (<b>v{version}</b>), created inactive. The current version stays untouched; activating the new one is a separate step.",
+    "fixedHint": "Fixed — a policy keeps its id and app across versions.",
+    "changeReason": "Change reason",
+    "changeReasonHint": "Recorded in the audit log.",
+    "changeReasonPlaceholder": "e.g. add area-scope rule",
+    "submit": "Save as v{version} (inactive)",
+    "saving": "Saving…",
+    "staleRevision": "Another admin changed this policy while you were editing. Reload to bring the latest version, then retry — your changes are kept."
   }
 }

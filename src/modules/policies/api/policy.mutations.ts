@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { apiPost } from "@/lib/pdp/client";
+import { apiPost, apiPut } from "@/lib/pdp/client";
 import type { PolicyDocument, PolicyHeadView } from "@/lib/pdp/contracts";
 
 /** Response of POST /v1/policies (PolicyCreated). */
@@ -74,4 +74,29 @@ function invalidatePolicy(queryClient: QueryClient, app: string, policyId: strin
   queryClient.invalidateQueries({ queryKey: ["policy", app, policyId] });
   queryClient.invalidateQueries({ queryKey: ["policy-versions", app, policyId] });
   queryClient.invalidateQueries({ queryKey: ["policies"] });
+}
+
+/**
+ * Append a new version (PUT, R014) — conditional write (R018): If-Match = the
+ * head revision. The new version is created INACTIVE; activating it is the
+ * separate explicit step (R020). Same reload-and-retry UX on 412 as activation.
+ */
+export function useAppendVersion(app: string, policyId: string) {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      content: PolicyDocument;
+      changeReason: string;
+      revision: number;
+    }) =>
+      apiPut<PolicyHeadView>(
+        `apps/${app}/policies/${policyId}`,
+        { content: input.content, changeReason: input.changeReason },
+        await getToken(),
+        { ifMatch: `"${input.revision}"` },
+      ),
+    onSuccess: () => invalidatePolicy(queryClient, app, policyId),
+  });
 }

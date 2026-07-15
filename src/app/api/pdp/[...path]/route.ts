@@ -38,11 +38,13 @@ function upstreamProblem(error: unknown) {
 const READ_PATHS =
   /^(policies|apps\/[a-z0-9-]+\/policies(\/[^/]+(\/versions(\/\d+)?)?)?)$/;
 /**
- * Write allowlist: create, activate and deactivate under an app. The second
- * capture (lifecycle verb) doubles as the ProjectAccessPolicy action.
+ * Write allowlist (POST): create, activate and deactivate under an app. The
+ * second capture (lifecycle verb) doubles as the ProjectAccessPolicy action.
  */
 const WRITE_PATH =
   /^apps\/([a-z0-9-]+)\/policies(?:\/[a-z0-9-]+\/(activate|deactivate))?$/;
+/** Append allowlist (PUT): a new version on an existing policy. */
+const APPEND_PATH = /^apps\/([a-z0-9-]+)\/policies\/[a-z0-9-]+$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -148,6 +150,70 @@ export async function POST(
   try {
     res = await pdpFetch(`/v1/${joined}`, {
       method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(ifMatch ? { "If-Match": ifMatch } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return upstreamProblem(error);
+  }
+  const text = await res.text();
+  const etag = res.headers.get("etag");
+
+  return new NextResponse(text, {
+    status: res.status,
+    headers: {
+      "content-type": res.headers.get("content-type") ?? "application/json",
+      ...(etag ? { etag } : {}),
+    },
+  });
+}
+
+/** Append a new version to an existing policy (R014); conditional (If-Match). */
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  const joined = path.join("/");
+
+  const appendMatch = APPEND_PATH.exec(joined);
+  if (!appendMatch) {
+    return NextResponse.json(
+      { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
+      { status: 404 },
+    );
+  }
+  const app = appendMatch[1];
+
+  const body = await req.json().catch(() => null);
+  if (body === null) {
+    return NextResponse.json(
+      { title: "Bad request", status: 400, code: "BFF_INVALID_JSON" },
+      { status: 400 },
+    );
+  }
+
+  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        title: "Forbidden",
+        status: 403,
+        code: "PROJECT_ACCESS_DENIED",
+        detail: `You have no write access to project "${app}".`,
+      },
+      { status: 403 },
+    );
+  }
+
+  const ifMatch = req.headers.get("if-match");
+  let res: Response;
+  try {
+    res = await pdpFetch(`/v1/${joined}`, {
+      method: "PUT",
       headers: {
         "content-type": "application/json",
         ...(ifMatch ? { "If-Match": ifMatch } : {}),

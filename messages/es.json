@@ -117,6 +117,18 @@
     "confirmDeactivate": "Retirar de producción",
     "deactivating": "Desactivando…",
     "staleRevision": "Otro admin cambió esta política mientras estabas aquí. Recarga para traer la última versión y reintenta — tu captura se conserva.",
-    "reloadAndRetry": "Recargar"
+    "reloadAndRetry": "Recargar",
+    "newVersion": "Nueva versión"
+  },
+  "edit": {
+    "title": "Editar política — nueva versión",
+    "intro": "Editar agrega una versión nueva e inmutable (<b>v{version}</b>), creada inactiva. La versión actual no se toca; activar la nueva es un paso aparte.",
+    "fixedHint": "Fijo — una política conserva su id y app entre versiones.",
+    "changeReason": "Motivo del cambio",
+    "changeReasonHint": "Se registra en la bitácora de auditoría.",
+    "changeReasonPlaceholder": "p. ej. agregar regla area-scope",
+    "submit": "Guardar como v{version} (inactiva)",
+    "saving": "Guardando…",
+    "staleRevision": "Otro admin cambió esta política mientras editabas. Recarga para traer la última versión y reintenta — tus cambios se conservan."
   }
 }
