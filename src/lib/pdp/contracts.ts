@@ -101,3 +101,22 @@ export function isProblem(value: unknown): value is Problem {
     typeof value === "object" && value !== null && "status" in value && "code" in value
   );
 }
+
+/* ---- evaluation (data plane) ---- */
+
+export interface EvaluationRequest {
+  action: string; // "resource:verb", e.g. "document:read"
+  resource: { type: string; id?: string; attributes?: Record<string, unknown> };
+  context?: Record<string, unknown>;
+  subjectAttributes?: Record<string, unknown>;
+  /** Explicit subject → delegated query (needs the delegation marker). */
+  subject?: string;
+}
+
+export interface Decision {
+  allowed: boolean;
+  reason: string;
+  decisionId: string;
+  policyVersion: string | null;
+  obligations: unknown[];
+}

@@ -45,6 +45,8 @@ const WRITE_PATH =
   /^apps\/([a-z0-9-]+)\/policies(?:\/[a-z0-9-]+\/(activate|deactivate))?$/;
 /** Append allowlist (PUT): a new version on an existing policy. */
 const APPEND_PATH = /^apps\/([a-z0-9-]+)\/policies\/[a-z0-9-]+$/;
+/** Evaluate allowlist (POST): the policy tester (data plane, read-like). */
+const EVALUATE_PATH = /^apps\/([a-z0-9-]+)\/evaluate$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -110,6 +112,12 @@ export async function POST(
   const { path } = await params;
   const joined = path.join("/");
 
+  // Evaluate (policy tester) is a read-like query, not a write — separate path.
+  const evalMatch = EVALUATE_PATH.exec(joined);
+  if (evalMatch) {
+    return proxyEvaluate(req, joined, evalMatch[1]);
+  }
+
   const writeMatch = WRITE_PATH.exec(joined);
   if (!writeMatch) {
     return NextResponse.json(
@@ -168,6 +176,33 @@ export async function POST(
       "content-type": res.headers.get("content-type") ?? "application/json",
       ...(etag ? { etag } : {}),
     },
+  });
+}
+
+/** Policy tester: forward an evaluation to the PDP (read access to the app). */
+async function proxyEvaluate(req: NextRequest, joined: string, app: string) {
+  const allowed = await projectAccess.can(MOCK_USER, "read", app);
+  if (!allowed) {
+    return NextResponse.json(
+      { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
+      { status: 403 },
+    );
+  }
+  const body = await req.json().catch(() => null);
+  let res: Response;
+  try {
+    res = await pdpFetch(`/v1/${joined}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return upstreamProblem(error);
+  }
+  const text = await res.text();
+  return new NextResponse(text, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
   });
 }
 
