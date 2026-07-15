@@ -37,6 +37,9 @@ export function LifecycleActions({
       <Link href={`/policies/${head.app}/${head.policyId}/edit`}>
         <Button variant="outline">{t("newVersion")}</Button>
       </Link>
+      <Link href={`/policies/${head.app}/test`}>
+        <Button variant="ghost">{t("test")}</Button>
+      </Link>
       {isActive && (
         <Button variant="danger" onClick={() => setDialog("deactivate")}>
           {t("deactivate")}

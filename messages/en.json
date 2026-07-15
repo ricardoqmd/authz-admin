@@ -118,7 +118,8 @@
     "deactivating": "Deactivating…",
     "staleRevision": "Another admin changed this policy while you were here. Reload to get the latest version, then retry — your input is kept.",
     "reloadAndRetry": "Reload",
-    "newVersion": "New version"
+    "newVersion": "New version",
+    "test": "Test"
   },
   "edit": {
     "title": "Edit policy — new version",
@@ -130,5 +131,29 @@
     "submit": "Save as v{version} (inactive)",
     "saving": "Saving…",
     "staleRevision": "Another admin changed this policy while you were editing. Reload to bring the latest version, then retry — your changes are kept."
+  },
+  "tester": {
+    "title": "Policy tester",
+    "intro": "Dry-run an authorization case against this app's ACTIVE policies — the same engine production uses. (Testing a specific inactive version before activation is coming — proposed R027.)",
+    "action": "Action",
+    "actionHint": "resource:verb, e.g. document:read",
+    "resourceType": "Resource type",
+    "resourceId": "Resource id",
+    "optional": "Optional",
+    "attributes": "Resource attributes (JSON)",
+    "attributesHint": "Attributes the rules read, e.g. assignees.",
+    "subjectAttributes": "Subject attributes (JSON)",
+    "context": "Context (JSON)",
+    "jsonHint": "JSON object, or '{}' for none.",
+    "subject": "Subject (delegated)",
+    "subjectHint": "Leave empty to test as yourself; a different subject needs the delegation marker.",
+    "subjectPlaceholder": "e.g. user-x",
+    "evaluate": "Evaluate",
+    "evaluating": "Evaluating…",
+    "permit": "PERMIT",
+    "deny": "DENY",
+    "policyVersion": "policy v{version}",
+    "decisionId": "decision id",
+    "invalidJsonIn": "Invalid JSON in {field}."
   }
 }
