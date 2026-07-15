@@ -118,15 +118,30 @@ export interface CreatePolicyForm {
   rules: PolicyRule[];
 }
 
+/** The document fields editable both on create and on append (new version). */
+export interface EditableFields {
+  resourceType: string;
+  actions: string;
+  combiningAlgorithm: "DENY_OVERRIDES" | "PERMIT_OVERRIDES";
+  defaultEffect: "PERMIT" | "DENY";
+  rules: PolicyRule[];
+}
+
 /**
  * Compose the PDP policy document from the validated form values.
  * NOTE (R026): form.app is NOT part of the document — it selects the ROUTE
  * (/v1/apps/{app}/policies). A stray `app` in the body is a 400 by design.
+ *
+ * @param version 1 on create; latest+1 on append (R014). The edit flow passes
+ *   the next version number.
  */
-export function toPolicyDocument(form: CreatePolicyForm): PolicyDocument {
+export function toPolicyDocument(
+  form: EditableFields & { policyId: string },
+  version = 1,
+): PolicyDocument {
   return {
     policyId: form.policyId,
-    version: 1, // create is always version 1; appends bump it (R014)
+    version,
     resourceType: form.resourceType,
     actions: form.actions
       .split(",")
@@ -136,6 +151,34 @@ export function toPolicyDocument(form: CreatePolicyForm): PolicyDocument {
     defaultEffect: form.defaultEffect,
     rules: form.rules,
   };
+}
+
+/** Schema for appending a new version (PUT): document fields + changeReason. */
+export function editPolicySchema(tv: Tv) {
+  return z.object({
+    resourceType: z
+      .string()
+      .min(1, tv("required"))
+      .regex(/^[a-z0-9-]+$/, tv("lowercaseId")),
+    actions: z
+      .string()
+      .min(1, tv("required"))
+      .regex(/^\s*(\*|[a-z0-9-]+)(\s*,\s*[a-z0-9-]+)*\s*$/, tv("actionsFormat")),
+    combiningAlgorithm: z.enum(["DENY_OVERRIDES", "PERMIT_OVERRIDES"]),
+    defaultEffect: z.enum(["PERMIT", "DENY"]),
+    rules: z.array(ruleSchema).superRefine((rules, ctx) => {
+      rules.forEach((rule, index) => {
+        if (findOrderingLiteralViolation(rule.condition)) {
+          ctx.addIssue({ code: "custom", path: [index], message: "orderingNeedsNumber" });
+        }
+      });
+    }),
+    changeReason: z.string().min(1, tv("required")),
+  });
+}
+
+export interface EditPolicyForm extends EditableFields {
+  changeReason: string;
 }
 
 export const DEFAULT_RULES: PolicyRule[] = [

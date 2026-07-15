@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ApiError } from "@/lib/pdp/client";
@@ -33,6 +34,9 @@ export function LifecycleActions({
       <Button onClick={() => setDialog("activate")}>
         {isActive ? t("changeActiveVersion") : t("activate")}
       </Button>
+      <Link href={`/policies/${head.app}/${head.policyId}/edit`}>
+        <Button variant="outline">{t("newVersion")}</Button>
+      </Link>
       {isActive && (
         <Button variant="danger" onClick={() => setDialog("deactivate")}>
           {t("deactivate")}

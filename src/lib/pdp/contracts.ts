@@ -36,6 +36,11 @@ export interface PolicyVersionSummary {
   audit: AuditView;
 }
 
+/** A single immutable version, including its full policy document. */
+export interface PolicyVersionView extends PolicyVersionSummary {
+  content: PolicyDocument;
+}
+
 export interface Paginated<T> {
   data: T[];
   pagination: {
