@@ -74,6 +74,8 @@ export function PolicyDetailScreen({ app, policyId }: { app: string; policyId: s
           <Skeleton className="h-40" />
         ) : (
           <VersionsTimeline
+            app={app}
+            policyId={policyId}
             versions={versions.data.data}
             activeVersion={head.data?.activeVersion ?? null}
           />

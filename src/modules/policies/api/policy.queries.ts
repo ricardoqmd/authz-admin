@@ -5,10 +5,10 @@ import { useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/pdp/client";
 import type {
   Paginated,
+  PolicyDocument,
   PolicyHeadSummary,
   PolicyHeadView,
   PolicyVersionSummary,
-  PolicyVersionView,
 } from "@/lib/pdp/contracts";
 
 export type StatusFilter = "all" | "active" | "inactive";
@@ -54,13 +54,17 @@ export function usePolicyVersions(app: string, policyId: string, page = 1, size 
   });
 }
 
-/** A single immutable version with its full content — the edit form prefill source. */
+/**
+ * A single immutable version — the endpoint returns the policy DOCUMENT
+ * directly (not wrapped in a `content` field). Prefill source for the edit
+ * form and the version-history inspector.
+ */
 export function usePolicyVersion(app: string, policyId: string, version: number | null) {
   const { getToken } = useAuth();
   return useQuery({
     queryKey: ["policy-version", app, policyId, version],
     queryFn: async () =>
-      apiGet<PolicyVersionView>(
+      apiGet<PolicyDocument>(
         `apps/${app}/policies/${policyId}/versions/${version}`,
         await getToken(),
       ),

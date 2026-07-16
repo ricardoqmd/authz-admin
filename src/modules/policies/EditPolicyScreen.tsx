@@ -60,9 +60,10 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
     },
   });
 
-  // Prefill once the latest version content is loaded.
+  // Prefill once the latest version is loaded. The version endpoint returns
+  // the policy document directly (not wrapped in `content`).
   useEffect(() => {
-    const c = latest.data?.content;
+    const c = latest.data;
     if (c) {
       reset({
         resourceType: c.resourceType,

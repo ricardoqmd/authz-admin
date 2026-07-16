@@ -32,7 +32,8 @@
     "back": "Policies",
     "revision": "revision {revision}",
     "activeDocument": "Active document (v{version})",
-    "versionHistory": "Version history"
+    "versionHistory": "Version history",
+    "viewDocument": "View document"
   },
   "create": {
     "title": "New policy",
