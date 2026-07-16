@@ -20,7 +20,8 @@ import { COMPARISON_OPS, isOrderingOp } from "../policy.schema";
 /* ---- builder view model (flat) ---- */
 
 interface ComparisonRow {
-  left: string; // ref path
+  leftKind: "ref" | "literal";
+  leftText: string;
   op: ComparisonOp;
   rightKind: "ref" | "literal";
   rightText: string;
@@ -63,11 +64,18 @@ function textToOperand(kind: "ref" | "literal", text: string): Operand {
 function conditionToRows(condition: Condition | undefined): ComparisonRow[] | null {
   if (!condition) return [];
   if (condition.type === "comparison") {
+    // Both operands are symmetric (ref | literal) — a left literal is what a
+    // role check needs ("administrador" IN subject.attr.roles).
     const left = operandToText(condition.left);
-    if (left.kind !== "ref") return null; // builder models left as a ref
     const right = operandToText(condition.right);
     return [
-      { left: left.text, op: condition.op, rightKind: right.kind, rightText: right.text },
+      {
+        leftKind: left.kind,
+        leftText: left.text,
+        op: condition.op,
+        rightKind: right.kind,
+        rightText: right.text,
+      },
     ];
   }
   if (condition.type === "and") {
@@ -99,7 +107,7 @@ export function builderToRules(builder: BuilderRule[]): PolicyRule[] {
     const comparisons: Condition[] = rule.conditions.map((row) => ({
       type: "comparison",
       op: row.op,
-      left: { ref: row.left.trim() },
+      left: textToOperand(row.leftKind, row.leftText),
       right: textToOperand(row.rightKind, row.rightText),
     }));
     return {
@@ -327,27 +335,55 @@ function RuleCard({
             }
           />
         ))}
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-7 px-2 text-xs"
-          onClick={() =>
-            onChange({
-              ...rule,
-              conditions: [
-                ...rule.conditions,
-                {
-                  left: "subject.attr.",
-                  op: "EQ",
-                  rightKind: "ref",
-                  rightText: "resource.attr.",
-                },
-              ],
-            })
-          }
-        >
-          + {t("addCondition")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={() =>
+              onChange({
+                ...rule,
+                conditions: [
+                  ...rule.conditions,
+                  {
+                    leftKind: "ref",
+                    leftText: "subject.attr.",
+                    op: "EQ",
+                    rightKind: "ref",
+                    rightText: "resource.attr.",
+                  },
+                ],
+              })
+            }
+          >
+            + {t("addCondition")}
+          </Button>
+          {/* Role-check sugar: inserts a normal comparison pre-filled with the
+              membership pattern (literal IN subject.attr.roles). Nothing hidden
+              — the row stays fully editable. */}
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={() =>
+              onChange({
+                ...rule,
+                conditions: [
+                  ...rule.conditions,
+                  {
+                    leftKind: "literal",
+                    leftText: "",
+                    op: "IN",
+                    rightKind: "ref",
+                    rightText: "subject.attr.roles",
+                  },
+                ],
+              })
+            }
+          >
+            + {t("addRoleCheck")}
+          </Button>
+        </div>
       </div>
     </Card>
   );
@@ -363,19 +399,32 @@ function ConditionRow({
   onRemove: () => void;
 }) {
   const t = useTranslations("rules");
+  const orderingLiteralBad = (kind: "ref" | "literal", text: string) =>
+    kind === "literal" && isOrderingOp(row.op) && Number.isNaN(Number(text.trim()));
   const literalIsNonNumeric =
-    row.rightKind === "literal" &&
-    isOrderingOp(row.op) &&
-    Number.isNaN(Number(row.rightText.trim()));
+    orderingLiteralBad(row.leftKind, row.leftText) ||
+    orderingLiteralBad(row.rightKind, row.rightText);
+  const hasLiteral = row.leftKind === "literal" || row.rightKind === "literal";
 
   return (
     <div className="space-y-1 rounded border border-line bg-surface p-2">
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_1fr_auto]">
+      <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto_auto_1fr_auto]">
+        <Select
+          aria-label={t("leftType")}
+          value={row.leftKind}
+          onChange={(e) =>
+            onChange({ ...row, leftKind: e.target.value as "ref" | "literal" })
+          }
+          className="w-auto text-xs"
+        >
+          <option value="ref">{t("reference")}</option>
+          <option value="literal">{t("literal")}</option>
+        </Select>
         <Input
           aria-label={t("left")}
-          list="ref-suggestions"
-          value={row.left}
-          onChange={(e) => onChange({ ...row, left: e.target.value })}
+          list={row.leftKind === "ref" ? "ref-suggestions" : undefined}
+          value={row.leftText}
+          onChange={(e) => onChange({ ...row, leftText: e.target.value })}
           className="font-mono text-xs"
         />
         <Select
@@ -417,7 +466,7 @@ function ConditionRow({
           ✕
         </Button>
       </div>
-      {row.rightKind === "literal" && (
+      {hasLiteral && (
         <p className={cn("text-xs", literalIsNonNumeric ? "text-danger" : "text-muted")}>
           {literalIsNonNumeric ? t("orderingNeedsNumber") : t("literalHint")}
         </p>
