@@ -1,7 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import type { PolicyHeadView, PolicyVersionView } from "@/lib/pdp/contracts";
+import type { PolicyDocument, PolicyHeadView } from "@/lib/pdp/contracts";
 import { server } from "@/test/msw/server";
 import { render, screen, waitFor } from "@/test/render";
 import { EditPolicyScreen } from "./EditPolicyScreen";
@@ -15,32 +15,26 @@ const HEAD: PolicyHeadView = {
   audit: { createdBy: "someone", createdAt: "2026-07-10T12:00:00Z", changeReason: null },
   activeContent: null,
 };
-const V1: PolicyVersionView = {
+// The single-version endpoint returns the policy document directly (flat).
+const V1: PolicyDocument = {
   policyId: "doc-access",
-  app: "records",
   version: 1,
   resourceType: "document",
-  audit: { createdBy: "someone", createdAt: "2026-07-10T12:00:00Z", changeReason: null },
-  content: {
-    policyId: "doc-access",
-    version: 1,
-    resourceType: "document",
-    actions: ["read"],
-    combiningAlgorithm: "DENY_OVERRIDES",
-    defaultEffect: "DENY",
-    rules: [
-      {
-        id: "r1",
-        effect: "PERMIT",
-        condition: {
-          type: "comparison",
-          op: "IN",
-          left: { ref: "subject.id" },
-          right: { ref: "resource.attr.assignees" },
-        },
+  actions: ["read"],
+  combiningAlgorithm: "DENY_OVERRIDES",
+  defaultEffect: "DENY",
+  rules: [
+    {
+      id: "r1",
+      effect: "PERMIT",
+      condition: {
+        type: "comparison",
+        op: "IN",
+        left: { ref: "subject.id" },
+        right: { ref: "resource.attr.assignees" },
       },
-    ],
-  },
+    },
+  ],
 };
 
 function seed(putHandler: Parameters<typeof http.put>[1]) {
