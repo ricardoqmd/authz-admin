@@ -120,3 +120,18 @@ export interface Decision {
   policyVersion: string | null;
   obligations: unknown[];
 }
+
+/**
+ * Dry-run simulation (R027): evaluate a hypothetical policy document — a draft
+ * being edited, or the content of a saved version — against a case, without
+ * persisting anything. POST /v1/apps/{app}/policies:simulate. The PDP validates
+ * `policy` exactly like a create (400 INVALID_POLICY if malformed) BEFORE
+ * evaluating, so a returned Decision implies the document is valid. Same
+ * Decision shape as /evaluate — the render is reused.
+ */
+export interface SimulationRequest {
+  /** Full policy document (no app — the route carries it, R026). */
+  policy: PolicyDocument;
+  /** The hypothetical case, same shape as an evaluate body (no app). */
+  request: EvaluationRequest;
+}
