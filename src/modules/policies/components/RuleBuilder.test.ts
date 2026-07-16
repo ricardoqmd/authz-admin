@@ -27,6 +27,17 @@ const FLAT_AND_RULE: PolicyRule = {
   },
 };
 
+const ROLE_RULE: PolicyRule = {
+  id: "admin-can-edit",
+  effect: "PERMIT",
+  condition: {
+    type: "comparison",
+    op: "IN",
+    left: { value: "administrador" },
+    right: { ref: "subject.attr.roles" },
+  },
+};
+
 describe("rulesToBuilder / builderToRules", () => {
   it("round-trips a flat AND of comparisons", () => {
     const builder = rulesToBuilder([FLAT_AND_RULE]);
@@ -40,6 +51,20 @@ describe("rulesToBuilder / builderToRules", () => {
     builder[0].conditions = builder[0].conditions.slice(0, 1);
     const [rule] = builderToRules(builder);
     expect(rule.condition?.type).toBe("comparison");
+  });
+
+  it("models a left literal (role membership) instead of stepping aside", () => {
+    const builder = rulesToBuilder([ROLE_RULE]);
+    expect(builder).not.toBeNull();
+    if (!builder) return;
+    expect(builder[0].conditions[0]).toMatchObject({
+      leftKind: "literal",
+      leftText: '"administrador"',
+      op: "IN",
+      rightKind: "ref",
+      rightText: "subject.attr.roles",
+    });
+    expect(builderToRules(builder)).toEqual([ROLE_RULE]);
   });
 
   it("steps aside (null) for OR groups — JSON mode territory", () => {
