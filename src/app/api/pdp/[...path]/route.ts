@@ -47,6 +47,12 @@ const WRITE_PATH =
 const APPEND_PATH = /^apps\/([a-z0-9-]+)\/policies\/[a-z0-9-]+$/;
 /** Evaluate allowlist (POST): the policy tester (data plane, read-like). */
 const EVALUATE_PATH = /^apps\/([a-z0-9-]+)\/evaluate$/;
+/**
+ * Simulate allowlist (POST, R027): dry-run a hypothetical policy document. The
+ * PDP treats it as control-plane (admin marker), so the BFF gates it as WRITE
+ * — same authoring bar as create/edit, not the read bar of evaluate.
+ */
+const SIMULATE_PATH = /^apps\/([a-z0-9-]+)\/policies:simulate$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -118,6 +124,12 @@ export async function POST(
     return proxyEvaluate(req, joined, evalMatch[1]);
   }
 
+  // Simulate (R027 dry-run) is authoring: gated as write, effect-free upstream.
+  const simMatch = SIMULATE_PATH.exec(joined);
+  if (simMatch) {
+    return proxySimulate(req, joined, simMatch[1]);
+  }
+
   const writeMatch = WRITE_PATH.exec(joined);
   if (!writeMatch) {
     return NextResponse.json(
@@ -185,6 +197,43 @@ async function proxyEvaluate(req: NextRequest, joined: string, app: string) {
   if (!allowed) {
     return NextResponse.json(
       { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
+      { status: 403 },
+    );
+  }
+  const body = await req.json().catch(() => null);
+  let res: Response;
+  try {
+    res = await pdpFetch(`/v1/${joined}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return upstreamProblem(error);
+  }
+  const text = await res.text();
+  return new NextResponse(text, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+  });
+}
+
+/**
+ * Policy tester dry-run (R027): forward a { policy, request } simulation to the
+ * PDP. Authoring op → WRITE access. Effect-free upstream (validates the policy
+ * as a create, then evaluates in-memory; nothing is persisted). No If-Match:
+ * there is no head to arbitrate — the document travels in the body.
+ */
+async function proxySimulate(req: NextRequest, joined: string, app: string) {
+  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        title: "Forbidden",
+        status: 403,
+        code: "PROJECT_ACCESS_DENIED",
+        detail: `You have no write access to project "${app}".`,
+      },
       { status: 403 },
     );
   }
