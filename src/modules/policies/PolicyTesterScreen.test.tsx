@@ -15,6 +15,12 @@ const PERMIT: Decision = {
   obligations: [],
 };
 
+const audit = {
+  createdBy: "admin",
+  createdAt: "2026-07-16T10:00:00Z",
+  changeReason: null,
+};
+
 describe("PolicyTesterScreen", () => {
   it("evaluates against the active policy and renders the Decision", async () => {
     let sentAttributes: unknown = null;
@@ -83,6 +89,62 @@ describe("PolicyTesterScreen", () => {
     expect(captured.body).not.toBeNull();
     expect(captured.body?.policy.policyId).toBe("draft");
     expect(captured.body?.request.action).toBe("document:read");
+  });
+
+  it("prefills the draft from a scoped policy's version and simulates that document", async () => {
+    const doc = {
+      policyId: "stepper-create",
+      version: 1,
+      resourceType: "stepper",
+      actions: ["create"],
+      combiningAlgorithm: "DENY_OVERRIDES",
+      defaultEffect: "DENY",
+      rules: [{ id: "admin-can-create", effect: "PERMIT" }],
+    };
+    const captured: { policyId: string | null } = { policyId: null };
+    server.use(
+      http.get("/api/pdp/apps/records/policies/stepper-create", () =>
+        HttpResponse.json({
+          policyId: "stepper-create",
+          app: "records",
+          resourceType: "stepper",
+          activeVersion: 1,
+          revision: 1,
+          audit,
+        }),
+      ),
+      http.get("/api/pdp/apps/records/policies/stepper-create/versions", () =>
+        HttpResponse.json({
+          data: [
+            {
+              policyId: "stepper-create",
+              version: 1,
+              app: "records",
+              resourceType: "stepper",
+              audit,
+            },
+          ],
+          pagination: { page: 1, size: 50, totalPages: 1, totalElements: 1 },
+        }),
+      ),
+      http.get("/api/pdp/apps/records/policies/stepper-create/versions/1", () =>
+        HttpResponse.json(doc),
+      ),
+      http.post(/\/api\/pdp\/apps\/records\/policies:simulate$/, async ({ request }) => {
+        const body = (await request.json()) as { policy: { policyId: string } };
+        captured.policyId = body.policy.policyId;
+        return HttpResponse.json<Decision>(PERMIT);
+      }),
+    );
+    const user = userEvent.setup();
+    render(<PolicyTesterScreen app="records" policyId="stepper-create" />);
+
+    // The draft textarea is prefilled with the version document.
+    expect(await screen.findByDisplayValue(/admin-can-create/)).toBeInTheDocument();
+    await user.click(screen.getByText("Evaluar"));
+
+    expect(await screen.findByText("PERMIT")).toBeInTheDocument();
+    expect(captured.policyId).toBe("stepper-create");
   });
 
   it("rejects an action without the resource:verb shape before calling the PDP", async () => {

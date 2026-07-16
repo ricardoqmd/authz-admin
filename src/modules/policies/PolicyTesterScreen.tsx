@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/pdp/client";
 import type {
   Decision,
@@ -12,6 +12,7 @@ import type {
 } from "@/lib/pdp/contracts";
 import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/ui";
 import { useEvaluate, useSimulate } from "./api/evaluate.mutations";
+import { usePolicy, usePolicyVersion, usePolicyVersions } from "./api/policy.queries";
 
 type Source = "active" | "draft";
 
@@ -42,21 +43,38 @@ const DRAFT_SKELETON = JSON.stringify(
 );
 
 /**
- * Policy tester (v2) — two sources:
+ * Policy tester (v3) — two sources:
  *  - "active": POST /v1/apps/{app}/evaluate — what production decides now.
  *  - "draft":  POST /v1/apps/{app}/policies:simulate (R027) — dry-run a policy
- *    document (a draft, or a saved version's content pasted in) with zero
- *    effect. The PDP validates it as a create first, so an INVALID_POLICY comes
- *    back with the same invalidParams as create.
+ *    document with zero effect. The PDP validates it as a create first, so an
+ *    INVALID_POLICY comes back with the same invalidParams as create.
+ *
+ * When reached from a specific policy (policyId given), the draft is prefilled
+ * with that policy's version content: one version → prefilled directly; many →
+ * a version selector chooses which one prefills. So you can dry-run any saved
+ * version — active or not — without activating it.
  */
-export function PolicyTesterScreen({ app }: { app: string }) {
+export function PolicyTesterScreen({
+  app,
+  policyId,
+}: {
+  app: string;
+  policyId?: string;
+}) {
   const t = useTranslations("tester");
   const tDetail = useTranslations("detail");
   const evaluate = useEvaluate(app);
   const simulate = useSimulate(app);
 
-  const [source, setSource] = useState<Source>("active");
+  const scoped = Boolean(policyId);
+  const pid = policyId ?? "";
+  const head = usePolicy(app, pid);
+  const versionsQuery = usePolicyVersions(app, pid);
+  const versions = versionsQuery.data?.data ?? [];
+
+  const [source, setSource] = useState<Source>(scoped ? "draft" : "active");
   const [policyDraft, setPolicyDraft] = useState(DRAFT_SKELETON);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
   const [action, setAction] = useState("document:read");
   const [resourceType, setResourceType] = useState("document");
@@ -72,6 +90,28 @@ export function PolicyTesterScreen({ app }: { app: string }) {
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   const pending = evaluate.isPending || simulate.isPending;
+
+  // Pick the version to prefill from: the active one, else the latest.
+  useEffect(() => {
+    if (!scoped || selectedVersion !== null || versions.length === 0) return;
+    const active = head.data?.activeVersion ?? null;
+    const latest = Math.max(...versions.map((v) => v.version));
+    setSelectedVersion(active ?? latest);
+  }, [scoped, selectedVersion, versions, head.data]);
+
+  const versionContent = usePolicyVersion(app, pid, scoped ? selectedVersion : null);
+
+  // Prefill the draft (and derive action/resourceType) from the chosen version.
+  // Keys off the loaded document only; the setters are stable.
+  useEffect(() => {
+    const doc = versionContent.data;
+    if (!doc) return;
+    setPolicyDraft(JSON.stringify(doc, null, 2));
+    setSource("draft");
+    setResourceType(doc.resourceType);
+    const verb = doc.actions[0];
+    if (verb && verb !== "*") setAction(`${doc.resourceType}:${verb}`);
+  }, [versionContent.data]);
 
   function parseOptional(
     label: string,
@@ -169,9 +209,10 @@ export function PolicyTesterScreen({ app }: { app: string }) {
       <Link href="/policies" className="text-sm text-muted hover:underline">
         ← {tDetail("back")}
       </Link>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold">{t("title")}</h1>
         <Badge>{app}</Badge>
+        {scoped && <span className="font-mono text-sm text-muted">{policyId}</span>}
       </div>
       <p className="text-sm text-muted">{t("intro")}</p>
 
@@ -188,6 +229,29 @@ export function PolicyTesterScreen({ app }: { app: string }) {
             </Select>
           )}
         </Field>
+
+        {source === "draft" && scoped && versions.length > 1 && (
+          <Field label={t("version")} hint={t("versionHint")}>
+            {(a11y) => (
+              <Select
+                {...a11y}
+                value={selectedVersion ?? ""}
+                onChange={(e) => setSelectedVersion(Number(e.target.value))}
+              >
+                {[...versions]
+                  .sort((a, b) => b.version - a.version)
+                  .map((v) => (
+                    <option key={v.version} value={v.version}>
+                      v{v.version}
+                      {v.version === head.data?.activeVersion
+                        ? ` · ${t("versionActiveMark")}`
+                        : ""}
+                    </option>
+                  ))}
+              </Select>
+            )}
+          </Field>
+        )}
 
         {source === "draft" && (
           <Field label={t("policyDraft")} hint={t("policyDraftHint")}>
