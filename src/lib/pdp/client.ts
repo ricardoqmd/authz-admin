@@ -65,3 +65,22 @@ export function apiPut<T>(
 ): Promise<T> {
   return apiWrite<T>("PUT", path, body, token, options);
 }
+
+/** Conditional delete (R018/R028): If-Match = the entry revision. 204 → null. */
+export async function apiDelete(
+  path: string,
+  token: string | null,
+  options?: { ifMatch?: string },
+): Promise<void> {
+  const res = await fetch(`/api/pdp/${path}`, {
+    method: "DELETE",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options?.ifMatch ? { "If-Match": options.ifMatch } : {}),
+    },
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new ApiError(res.status, isProblem(payload) ? payload : null);
+  }
+}

@@ -1,7 +1,9 @@
 {
   "shell": {
     "appName": "PAP",
-    "appSubtitle": "Authz Admin"
+    "appSubtitle": "Authz Admin",
+    "navPolicies": "Policies",
+    "navCatalogue": "Vocabulary"
   },
   "policies": {
     "title": "Policies",
@@ -177,5 +179,39 @@
     "policyVersion": "policy v{version}",
     "decisionId": "decision id",
     "invalidJsonIn": "Invalid JSON in {field}."
+  },
+  "catalogue": {
+    "title": "Action vocabulary",
+    "intro": "Declare which actions exist for each resource type of an app. Authoring policies requires the vocabulary declared first (R028).",
+    "app": "App",
+    "appHint": "Pick or type the app whose vocabulary you manage.",
+    "appEmpty": "Type an app above to view or declare its vocabulary.",
+    "empty": "This app declares no vocabulary yet. Add a resource type below.",
+    "loadError": "Could not load the vocabulary: {message}",
+    "newEntry": "New resource type",
+    "resourceType": "Resource type",
+    "resourceTypeHint": "Clean name, e.g. document.",
+    "resourceTypeRequired": "Type the resource type.",
+    "actions": "Actions",
+    "addAction": "+ action",
+    "actionPlaceholder": "verb",
+    "removeAction": "Remove {action}",
+    "emptyActions": "Add at least one action.",
+    "noStar": "Do not use '*' here — the catalogue lists explicit actions.",
+    "dupAction": "That action is already in the list.",
+    "create": "Declare",
+    "creating": "Declaring…",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "revision": "rev {revision}",
+    "alreadyExists": "A vocabulary for that resource type already exists.",
+    "actionInUse": "You can't remove that action: active policies use it. Deactivate or re-version them first.",
+    "blocking": "Blocking:",
+    "stale": "Another admin changed this vocabulary while you were editing. Reload and retry.",
+    "reload": "Reload"
   }
 }

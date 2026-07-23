@@ -1,24 +1,56 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
-import { Badge } from "@/ui";
+import { Badge, cn } from "@/ui";
 import { LocaleSwitcher } from "./_shell/LocaleSwitcher";
 
-/** Minimal authenticated shell — header only; nav grows with the views. */
+/** Minimal authenticated shell — header + primary nav; grows with the views. */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const t = useTranslations("shell");
+  const pathname = usePathname();
+
+  const nav = [
+    {
+      href: "/policies",
+      label: t("navPolicies"),
+      active: pathname.startsWith("/policies"),
+    },
+    {
+      href: "/catalogue",
+      label: t("navCatalogue"),
+      active: pathname.startsWith("/catalogue"),
+    },
+  ];
 
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
-          <span className="font-semibold">
-            {t("appName")}{" "}
-            <span className="font-normal text-muted">· {t("appSubtitle")}</span>
-          </span>
+          <div className="flex items-center gap-5">
+            <span className="font-semibold">
+              {t("appName")}{" "}
+              <span className="font-normal text-muted">· {t("appSubtitle")}</span>
+            </span>
+            <nav className="flex items-center gap-4 text-sm">
+              {nav.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className={cn(
+                    "hover:text-text",
+                    n.active ? "font-medium text-text" : "text-muted",
+                  )}
+                >
+                  {n.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
           <div className="flex items-center gap-3">
             {user && (
               <div className="hidden items-center gap-2 text-sm text-muted sm:flex">

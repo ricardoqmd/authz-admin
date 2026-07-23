@@ -135,3 +135,26 @@ export interface SimulationRequest {
   /** The hypothetical case, same shape as an evaluate body (no app). */
   request: EvaluationRequest;
 }
+
+/* ---- action catalogue (R028) ---- */
+
+/**
+ * The declared vocabulary of a (app, resourceType): the set of action ids that
+ * exist for that resource type. Authoring a policy whose actions fall outside
+ * it is rejected. `app` comes from the route; `revision` is the strong ETag.
+ */
+export interface CatalogueEntry {
+  app: string;
+  resourceType: string;
+  actions: string[];
+  revision: number;
+}
+
+/**
+ * GET /v1/apps/{app}/action-catalogue — the full (unpaginated) vocabulary.
+ * Uses the API's `data` collection envelope (like Paginated, minus pagination —
+ * a vocabulary is bounded); the list is not wrapped in `entries` (v0.4.1).
+ */
+export interface CatalogueList {
+  data: CatalogueEntry[];
+}
