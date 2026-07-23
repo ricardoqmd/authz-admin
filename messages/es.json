@@ -1,7 +1,9 @@
 {
   "shell": {
     "appName": "PAP",
-    "appSubtitle": "Authz Admin"
+    "appSubtitle": "Authz Admin",
+    "navPolicies": "Políticas",
+    "navCatalogue": "Vocabulario"
   },
   "policies": {
     "title": "Políticas",
@@ -177,5 +179,39 @@
     "policyVersion": "política v{version}",
     "decisionId": "id de decisión",
     "invalidJsonIn": "JSON inválido en {field}."
+  },
+  "catalogue": {
+    "title": "Vocabulario de acciones",
+    "intro": "Declara qué acciones existen para cada tipo de recurso de una app. Autorar políticas exige el vocabulario declarado primero (R028).",
+    "app": "App",
+    "appHint": "Elige o escribe la app cuyo vocabulario administras.",
+    "appEmpty": "Escribe una app arriba para ver o declarar su vocabulario.",
+    "empty": "Esta app aún no declara vocabulario. Agrega un tipo de recurso abajo.",
+    "loadError": "No se pudo cargar el vocabulario: {message}",
+    "newEntry": "Nuevo tipo de recurso",
+    "resourceType": "Tipo de recurso",
+    "resourceTypeHint": "Nombre limpio, p. ej. document.",
+    "resourceTypeRequired": "Escribe el tipo de recurso.",
+    "actions": "Acciones",
+    "addAction": "+ acción",
+    "actionPlaceholder": "verbo",
+    "removeAction": "Quitar {action}",
+    "emptyActions": "Agrega al menos una acción.",
+    "noStar": "No uses '*' aquí — el catálogo lista las acciones explícitas.",
+    "dupAction": "Esa acción ya está en la lista.",
+    "create": "Declarar",
+    "creating": "Declarando…",
+    "edit": "Editar",
+    "delete": "Borrar",
+    "confirmDelete": "Confirmar borrado",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "cancel": "Cancelar",
+    "revision": "rev {revision}",
+    "alreadyExists": "Ya existe vocabulario para ese tipo de recurso.",
+    "actionInUse": "No puedes quitar esa acción: políticas activas la usan. Desactívalas o versiónalas primero.",
+    "blocking": "Bloquean:",
+    "stale": "Otro admin cambió este vocabulario mientras editabas. Recarga y reintenta.",
+    "reload": "Recargar"
   }
 }

@@ -53,6 +53,12 @@ const EVALUATE_PATH = /^apps\/([a-z0-9-]+)\/evaluate$/;
  * — same authoring bar as create/edit, not the read bar of evaluate.
  */
 const SIMULATE_PATH = /^apps\/([a-z0-9-]+)\/policies:simulate$/;
+/** Action catalogue (R028). Read: list + one entry. */
+const CATALOGUE_READ = /^apps\/[a-z0-9-]+\/action-catalogue(\/[a-z0-9-]+)?$/;
+/** Catalogue create (POST): a new entry for a resourceType under the app. */
+const CATALOGUE_CREATE_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue$/;
+/** Catalogue item (PUT replace / DELETE): one entry, conditional (If-Match). */
+const CATALOGUE_ITEM_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue\/[a-z0-9-]+$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -69,7 +75,7 @@ export async function GET(
   const { path } = await params;
   const joined = path.join("/");
 
-  if (!READ_PATHS.test(joined)) {
+  if (!READ_PATHS.test(joined) && !CATALOGUE_READ.test(joined)) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
@@ -130,15 +136,18 @@ export async function POST(
     return proxySimulate(req, joined, simMatch[1]);
   }
 
+  // Policy write OR catalogue create (R028) — both are write-gated creates.
   const writeMatch = WRITE_PATH.exec(joined);
-  if (!writeMatch) {
+  const catMatch = CATALOGUE_CREATE_PATH.exec(joined);
+  const match = writeMatch ?? catMatch;
+  if (!match) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
     );
   }
-  const app = writeMatch[1];
-  const action = (writeMatch[2] ?? "write") as "write" | "activate" | "deactivate";
+  const app = match[1];
+  const action = (writeMatch?.[2] ?? "write") as "write" | "activate" | "deactivate";
 
   const body = await req.json().catch(() => null);
   if (body === null) {
@@ -187,6 +196,60 @@ export async function POST(
     headers: {
       "content-type": res.headers.get("content-type") ?? "application/json",
       ...(etag ? { etag } : {}),
+    },
+  });
+}
+
+/**
+ * Delete a catalogue entry (R028) — conditional (If-Match). Only the action
+ * catalogue exposes DELETE; policies are never deleted (append-only, R016).
+ * A 409 ACTION_IN_USE (active policies still govern the type) is forwarded
+ * untouched so the UI can surface the blocking policyIds.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  const joined = path.join("/");
+
+  const catItem = CATALOGUE_ITEM_PATH.exec(joined);
+  if (!catItem) {
+    return NextResponse.json(
+      { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
+      { status: 404 },
+    );
+  }
+  const app = catItem[1];
+
+  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        title: "Forbidden",
+        status: 403,
+        code: "PROJECT_ACCESS_DENIED",
+        detail: `You have no write access to project "${app}".`,
+      },
+      { status: 403 },
+    );
+  }
+
+  const ifMatch = req.headers.get("if-match");
+  let res: Response;
+  try {
+    res = await pdpFetch(`/v1/${joined}`, {
+      method: "DELETE",
+      headers: { ...(ifMatch ? { "If-Match": ifMatch } : {}) },
+    });
+  } catch (error) {
+    return upstreamProblem(error);
+  }
+  const text = await res.text();
+  return new NextResponse(text || null, {
+    status: res.status,
+    headers: {
+      "content-type": res.headers.get("content-type") ?? "application/json",
     },
   });
 }
@@ -263,14 +326,18 @@ export async function PUT(
   const { path } = await params;
   const joined = path.join("/");
 
+  // Append a policy version OR replace a catalogue entry (R028) — both are
+  // conditional (If-Match) writes under the app.
   const appendMatch = APPEND_PATH.exec(joined);
-  if (!appendMatch) {
+  const catItem = CATALOGUE_ITEM_PATH.exec(joined);
+  const match = appendMatch ?? catItem;
+  if (!match) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
     );
   }
-  const app = appendMatch[1];
+  const app = match[1];
 
   const body = await req.json().catch(() => null);
   if (body === null) {
