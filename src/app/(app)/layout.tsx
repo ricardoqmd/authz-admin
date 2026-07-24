@@ -25,6 +25,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       label: t("navCatalogue"),
       active: pathname.startsWith("/catalogue"),
     },
+    {
+      href: "/config",
+      label: t("navConfig"),
+      active: pathname.startsWith("/config"),
+    },
   ];
 
   return (

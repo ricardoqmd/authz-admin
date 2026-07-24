@@ -158,3 +158,45 @@ export interface CatalogueEntry {
 export interface CatalogueList {
   data: CatalogueEntry[];
 }
+
+/* ---- per-app configuration (R029) ---- */
+
+/**
+ * Remote attribute source (PIP). `url` MUST be http(s) and carry the `{sub}`
+ * placeholder (the opaque Keycloak subject id). `credentialRef` is a NAME
+ * pointing at the deployment's secret mechanism — NEVER the secret itself; the
+ * PDP stores only the reference and the adapter (R031) resolves it. Bounds:
+ * timeoutMs 1–10000, cacheTtlSeconds 0–86400.
+ */
+export interface PipConfig {
+  url: string;
+  timeoutMs: number;
+  cacheTtlSeconds: number;
+  credentialRef: string;
+}
+
+/**
+ * The per-app configuration singleton (R029): where subject attributes come
+ * from (claim mapping) plus the optional PIP endpoint. A missing configuration
+ * DEGRADES (attributes taken from the token as-is), it never denies. Absent
+ * sections are omitted from the JSON (not empty objects). `app` is set by the
+ * server from the route; `revision` is the strong ETag for If-Match writes.
+ */
+export interface AppConfig {
+  app: string;
+  /** attribute name → claim path (e.g. roles → resource_access.kronia.roles). */
+  subjectAttributes?: Record<string, string>;
+  pip?: PipConfig;
+  revision: number;
+}
+
+/**
+ * Create/replace body (no `app` — the route carries it, R026; no `revision` —
+ * that travels as If-Match). At least one section must be present; a fully
+ * empty config is rejected (INVALID_APP_CONFIG). To remove configuration
+ * entirely, DELETE it (returns to the degraded default).
+ */
+export interface AppConfigWrite {
+  subjectAttributes?: Record<string, string>;
+  pip?: PipConfig;
+}

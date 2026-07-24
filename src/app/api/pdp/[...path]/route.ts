@@ -59,6 +59,12 @@ const CATALOGUE_READ = /^apps\/[a-z0-9-]+\/action-catalogue(\/[a-z0-9-]+)?$/;
 const CATALOGUE_CREATE_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue$/;
 /** Catalogue item (PUT replace / DELETE): one entry, conditional (If-Match). */
 const CATALOGUE_ITEM_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue\/[a-z0-9-]+$/;
+/**
+ * Per-app configuration (R029). A singleton — the SAME path serves all four
+ * verbs: GET (read), POST (create), PUT (replace), DELETE. `revision`/If-Match
+ * gate the conditional writes; a missing config degrades, never denies.
+ */
+const CONFIG_PATH = /^apps\/([a-z0-9-]+)\/configuration$/;
 
 // TODO(phase 2): derive from the validated JWT, not from a constant.
 // Neutral demo values only — real app names belong to the internal deployment.
@@ -75,7 +81,11 @@ export async function GET(
   const { path } = await params;
   const joined = path.join("/");
 
-  if (!READ_PATHS.test(joined) && !CATALOGUE_READ.test(joined)) {
+  if (
+    !READ_PATHS.test(joined) &&
+    !CATALOGUE_READ.test(joined) &&
+    !CONFIG_PATH.test(joined)
+  ) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
@@ -136,10 +146,12 @@ export async function POST(
     return proxySimulate(req, joined, simMatch[1]);
   }
 
-  // Policy write OR catalogue create (R028) — both are write-gated creates.
+  // Policy write OR catalogue create (R028) OR config create (R029) — all
+  // write-gated creates under the app.
   const writeMatch = WRITE_PATH.exec(joined);
   const catMatch = CATALOGUE_CREATE_PATH.exec(joined);
-  const match = writeMatch ?? catMatch;
+  const configMatch = CONFIG_PATH.exec(joined);
+  const match = writeMatch ?? catMatch ?? configMatch;
   if (!match) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
@@ -201,10 +213,11 @@ export async function POST(
 }
 
 /**
- * Delete a catalogue entry (R028) — conditional (If-Match). Only the action
- * catalogue exposes DELETE; policies are never deleted (append-only, R016).
- * A 409 ACTION_IN_USE (active policies still govern the type) is forwarded
- * untouched so the UI can surface the blocking policyIds.
+ * Delete a catalogue entry (R028) or an app configuration (R029) — conditional
+ * (If-Match). Policies are never deleted (append-only, R016). A 409
+ * ACTION_IN_USE (active policies still govern the type) is forwarded untouched
+ * so the UI can surface the blocking policyIds; deleting a config just returns
+ * the app to the degraded default.
  */
 export async function DELETE(
   req: NextRequest,
@@ -214,13 +227,15 @@ export async function DELETE(
   const joined = path.join("/");
 
   const catItem = CATALOGUE_ITEM_PATH.exec(joined);
-  if (!catItem) {
+  const configMatch = CONFIG_PATH.exec(joined);
+  const match = catItem ?? configMatch;
+  if (!match) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
     );
   }
-  const app = catItem[1];
+  const app = match[1];
 
   const allowed = await projectAccess.can(MOCK_USER, "write", app);
   if (!allowed) {
@@ -326,11 +341,12 @@ export async function PUT(
   const { path } = await params;
   const joined = path.join("/");
 
-  // Append a policy version OR replace a catalogue entry (R028) — both are
-  // conditional (If-Match) writes under the app.
+  // Append a policy version OR replace a catalogue entry (R028) OR replace an
+  // app configuration (R029) — all conditional (If-Match) writes under the app.
   const appendMatch = APPEND_PATH.exec(joined);
   const catItem = CATALOGUE_ITEM_PATH.exec(joined);
-  const match = appendMatch ?? catItem;
+  const configMatch = CONFIG_PATH.exec(joined);
+  const match = appendMatch ?? catItem ?? configMatch;
   if (!match) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
