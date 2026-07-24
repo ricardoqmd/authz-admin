@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, type Resolver, useForm } from "react-hook-form";
 import { ApiError } from "@/lib/pdp/client";
 import type { PolicyRule } from "@/lib/pdp/contracts";
+import { CatalogueActionsField } from "@/modules/catalogue/CatalogueActionsField";
 import { Button, Card, Field, Input, Select, Skeleton } from "@/ui";
 import { useAppendVersion } from "./api/policy.mutations";
 import { usePolicy, usePolicyVersion, usePolicyVersions } from "./api/policy.queries";
@@ -44,6 +45,7 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
   const {
     register,
     control,
+    watch,
     handleSubmit,
     reset,
     setError,
@@ -183,13 +185,26 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
               {(a11y) => <Input {...a11y} {...register("resourceType")} />}
             </Field>
 
-            <Field
-              label={tc("fields.actions")}
-              error={errors.actions?.message}
-              hint={tc("fields.actionsHint")}
-            >
-              {(a11y) => <Input {...a11y} {...register("actions")} />}
-            </Field>
+            <div>
+              <span className="mb-1 block text-sm font-medium">
+                {tc("fields.actions")}
+              </span>
+              <Controller
+                control={control}
+                name="actions"
+                render={({ field }) => (
+                  <CatalogueActionsField
+                    app={app}
+                    resourceType={watch("resourceType")}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+              {errors.actions?.message && (
+                <p className="mt-1 text-xs text-danger">{errors.actions.message}</p>
+              )}
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={tc("fields.combiningAlgorithm")}>

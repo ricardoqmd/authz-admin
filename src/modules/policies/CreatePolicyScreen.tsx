@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { Controller, type Resolver, useForm } from "react-hook-form";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/pdp/client";
+import { CatalogueActionsField } from "@/modules/catalogue/CatalogueActionsField";
 import { Button, Card, Field, Input, Select } from "@/ui";
 import { useCreatePolicy } from "./api/policy.mutations";
 import { RuleBuilder } from "./components/RuleBuilder";
@@ -43,6 +44,7 @@ export function CreatePolicyScreen() {
   const {
     register,
     control,
+    watch,
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
@@ -161,13 +163,24 @@ export function CreatePolicyScreen() {
             </Field>
           </div>
 
-          <Field
-            label={t("fields.actions")}
-            error={errors.actions?.message}
-            hint={t("fields.actionsHint")}
-          >
-            {(a11y) => <Input {...a11y} {...register("actions")} />}
-          </Field>
+          <div>
+            <span className="mb-1 block text-sm font-medium">{t("fields.actions")}</span>
+            <Controller
+              control={control}
+              name="actions"
+              render={({ field }) => (
+                <CatalogueActionsField
+                  app={watch("app")}
+                  resourceType={watch("resourceType")}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            {errors.actions?.message && (
+              <p className="mt-1 text-xs text-danger">{errors.actions.message}</p>
+            )}
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t("fields.combiningAlgorithm")}>

@@ -213,5 +213,14 @@
     "blocking": "Bloquean:",
     "stale": "Otro admin cambió este vocabulario mientras editabas. Recarga y reintenta.",
     "reload": "Recargar"
+  },
+  "catalogueActions": {
+    "pickFirst": "Elige app y tipo de recurso para ver sus acciones.",
+    "loading": "Cargando vocabulario…",
+    "notDeclared": "No hay vocabulario declarado para '{resourceType}' en {app} — autorar aquí daría 400.",
+    "declareLink": "Declarar vocabulario",
+    "fallbackHint": "No se pudo leer el vocabulario; escribe las acciones separadas por coma.",
+    "all": "todas (*)",
+    "allPreview": "Se enviará * → el PDP lo expande a: {actions}"
   }
 }
