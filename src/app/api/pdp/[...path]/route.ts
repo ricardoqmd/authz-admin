@@ -2,16 +2,19 @@
  * BFF proxy — the ONLY door between the browser and the PDP.
  *
  * Responsibilities (target shape, model D):
- *   1. Validate the user's Bearer JWT against Keycloak JWKS (resource-server
- *      style; @ricardoqmd/auth-* stays client-side). — TODO(phase 2)
+ *   1. Validate the user's Bearer JWT against the realm JWKS (resource-server
+ *      style; @ricardoqmd/auth-* stays client-side). — see lib/auth/server.ts
  *   2. Enforce project access via ProjectAccessPolicy (meta-policy check).
+ *      — TODO(phase 2, step 2): swap in EvaluateProjectAccessPolicy.
  *   3. Execute against the PDP with the BFF's own service credential.
  *
- * Phase 1 scope: READ endpoints only, mock user, permissive access policy.
- * The seams (steps 1–2) are in place so phase 2 swaps implementations, not
- * structure.
+ * Step 1 is done: every handler derives its caller from a verified token
+ * before anything else runs, so the BFF never spends its credential on an
+ * unauthenticated request. Step 2 still ships the permissive hardcoded
+ * policy — the seam is unchanged, it just receives a real user now.
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { TokenError, type VerifiedUser, verifyCaller } from "@/lib/auth/server";
 import { projectAccess } from "@/lib/authz/project-access";
 import { pdpFetch, UpstreamError } from "@/lib/pdp/server";
 
@@ -66,18 +69,68 @@ const CATALOGUE_ITEM_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue\/[a-z0-9-]+$/
  */
 const CONFIG_PATH = /^apps\/([a-z0-9-]+)\/configuration$/;
 
-// TODO(phase 2): derive from the validated JWT, not from a constant.
-// Neutral demo values only — real app names belong to the internal deployment.
-const MOCK_USER = {
-  sub: "mock-admin",
-  roles: ["pap-admin"],
-  apps: ["records", "billing"],
-};
+/**
+ * Authenticate the caller, or produce the response that refuses them.
+ *
+ * Returns the verified user on success and a ready-to-send NextResponse on
+ * failure, so a handler cannot forget to stop: `instanceof NextResponse` is
+ * the only way past it. Fail closed — there is no path through this function
+ * that yields a user without a verified token.
+ *
+ * A misconfigured deployment answers 500, never 401 and never "allow": a
+ * missing env var is our fault, not the caller's, and must not be mistakable
+ * for a bad token in the logs.
+ */
+async function authenticate(req: NextRequest): Promise<VerifiedUser | NextResponse> {
+  try {
+    return await verifyCaller(req);
+  } catch (error) {
+    if (!(error instanceof TokenError)) throw error;
+    if (error.reason === "misconfigured") {
+      console.error(`[pap-bff] ${error.message}`);
+      return NextResponse.json(
+        {
+          title: "Server misconfigured",
+          status: 500,
+          code: "BFF_MISCONFIGURED",
+          detail: "Caller token verification is not configured.",
+        },
+        { status: 500 },
+      );
+    }
+    // Server-side only, and only the reason: no token, no claim, no subject.
+    // Without it the first production 401 is undiagnosable; with anything more
+    // than the reason it becomes a leak.
+    console.warn(`[pap-bff] rejected caller: ${error.reason}`);
+    // One body for every rejection reason. Which check failed (absent,
+    // expired, bad signature, wrong client) stays server-side: telling an
+    // anonymous caller narrows their next guess for free. Never echo the
+    // token or any claim.
+    return NextResponse.json(
+      {
+        title: "Unauthorized",
+        status: 401,
+        code: "UNAUTHENTICATED",
+        detail: "A valid Bearer token is required.",
+      },
+      // RFC 6750 §3: a bearer-token resource announces the scheme on a 401.
+      // Header only — bare `Bearer`, with no realm or error code, so the body
+      // stays byte-identical across all four rejection reasons and the header
+      // does not become the side channel the body refuses to be.
+      { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
+    );
+  }
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
+  // Before anything else — including the path allowlist, so an anonymous
+  // caller cannot map which routes exist by their status codes.
+  const caller = await authenticate(req);
+  if (caller instanceof NextResponse) return caller;
+
   const { path } = await params;
   const joined = path.join("/");
 
@@ -95,7 +148,7 @@ export async function GET(
   // Enforcement seam. For list endpoints the app filter is applied client-side
   // in phase 1 (the PDP has no ?app filter yet); per-policy reads could check
   // projectOf(resourceType) here once reads are gated too.
-  const allowed = await projectAccess.can(MOCK_USER, "read", "*");
+  const allowed = await projectAccess.can(caller, "read", "*");
   if (!allowed) {
     return NextResponse.json(
       { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
@@ -131,19 +184,22 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
+  const caller = await authenticate(req);
+  if (caller instanceof NextResponse) return caller;
+
   const { path } = await params;
   const joined = path.join("/");
 
   // Evaluate (policy tester) is a read-like query, not a write — separate path.
   const evalMatch = EVALUATE_PATH.exec(joined);
   if (evalMatch) {
-    return proxyEvaluate(req, joined, evalMatch[1]);
+    return proxyEvaluate(req, caller, joined, evalMatch[1]);
   }
 
   // Simulate (R027 dry-run) is authoring: gated as write, effect-free upstream.
   const simMatch = SIMULATE_PATH.exec(joined);
   if (simMatch) {
-    return proxySimulate(req, joined, simMatch[1]);
+    return proxySimulate(req, caller, joined, simMatch[1]);
   }
 
   // Policy write OR catalogue create (R028) OR config create (R029) — all
@@ -171,7 +227,7 @@ export async function POST(
 
   // Enforcement seam (model D): since R026 the app is a ROUTE coordinate;
   // the check runs BEFORE the BFF spends its credential.
-  const allowed = await projectAccess.can(MOCK_USER, action, app);
+  const allowed = await projectAccess.can(caller, action, app);
   if (!allowed) {
     return NextResponse.json(
       {
@@ -223,6 +279,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
+  const caller = await authenticate(req);
+  if (caller instanceof NextResponse) return caller;
+
   const { path } = await params;
   const joined = path.join("/");
 
@@ -237,7 +296,7 @@ export async function DELETE(
   }
   const app = match[1];
 
-  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  const allowed = await projectAccess.can(caller, "write", app);
   if (!allowed) {
     return NextResponse.json(
       {
@@ -270,8 +329,13 @@ export async function DELETE(
 }
 
 /** Policy tester: forward an evaluation to the PDP (read access to the app). */
-async function proxyEvaluate(req: NextRequest, joined: string, app: string) {
-  const allowed = await projectAccess.can(MOCK_USER, "read", app);
+async function proxyEvaluate(
+  req: NextRequest,
+  caller: VerifiedUser,
+  joined: string,
+  app: string,
+) {
+  const allowed = await projectAccess.can(caller, "read", app);
   if (!allowed) {
     return NextResponse.json(
       { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
@@ -302,8 +366,13 @@ async function proxyEvaluate(req: NextRequest, joined: string, app: string) {
  * as a create, then evaluates in-memory; nothing is persisted). No If-Match:
  * there is no head to arbitrate — the document travels in the body.
  */
-async function proxySimulate(req: NextRequest, joined: string, app: string) {
-  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+async function proxySimulate(
+  req: NextRequest,
+  caller: VerifiedUser,
+  joined: string,
+  app: string,
+) {
+  const allowed = await projectAccess.can(caller, "write", app);
   if (!allowed) {
     return NextResponse.json(
       {
@@ -338,6 +407,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
+  const caller = await authenticate(req);
+  if (caller instanceof NextResponse) return caller;
+
   const { path } = await params;
   const joined = path.join("/");
 
@@ -363,7 +435,7 @@ export async function PUT(
     );
   }
 
-  const allowed = await projectAccess.can(MOCK_USER, "write", app);
+  const allowed = await projectAccess.can(caller, "write", app);
   if (!allowed) {
     return NextResponse.json(
       {

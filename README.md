@@ -1,9 +1,13 @@
-# PAP — Authz Admin (POC, phase 1: read-only)
+# PAP — Authz Admin (POC)
 
 Control plane UI for the [service-policy](https://github.com/ricardoqmd/service-policy)
 PDP. This proof of concept covers the read surface (policy list, detail,
-version history) with the structural seams already in place for phase 2
-(writes, meta-policy enforcement, real Keycloak auth).
+version history), the write surface (create, new version, activate/deactivate,
+action catalogue and per-app configuration, all with the ETag/If-Match
+concurrency pattern), the policy tester against `/v1/evaluate`, and
+server-side verification of the caller's token in the BFF. One seam is still a
+stand-in for its target implementation: project-access enforcement runs on
+`HardcodedProjectAccessPolicy` rather than the PDP meta-policy.
 
 ## Architecture in one paragraph
 
@@ -55,13 +59,7 @@ Contracts in `src/lib/pdp/contracts.ts` are hand-written from the documented
 REST contract. With the PDP running, regenerate full types from the live
 OpenAPI (`pnpm generate:pdp-types`, requires `pnpm add -D openapi-typescript`).
 
-## Phase 2 (planned)
+## Planned
 
-- Writes with the ETag/If-Match/412 pattern (create, new version, activate,
-  deactivate) and the reload-and-retry concurrency UX.
 - Meta-policy enforcement: seed `pap-project-access` + swap
   `HardcodedProjectAccessPolicy` -> `EvaluateProjectAccessPolicy`.
-- Real auth: JWKS validation in the
-  BFF (resource-server style) + `client_credentials` service account. (The
-  browser side is already wired: `ricardoqmd-auth` adapter.)
-- Policy tester against `/v1/evaluate`.
