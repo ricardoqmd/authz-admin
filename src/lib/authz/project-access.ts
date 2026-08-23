@@ -17,23 +17,46 @@
 
 export type ProjectAction = "read" | "write" | "activate" | "deactivate";
 
+/** The caller, as the policy sees them — the verified claims, nothing else. */
+type PolicySubject = { sub: string; roles: string[]; apps: string[] };
+
 export interface ProjectAccessPolicy {
-  can(
-    user: { sub: string; roles: string[]; apps: string[] },
-    action: ProjectAction,
-    app: string,
-  ): Promise<boolean>;
+  /** May this caller take `action` on `app`? The app is always a real one. */
+  can(user: PolicySubject, action: ProjectAction, app: string): Promise<boolean>;
+
+  /**
+   * May this caller read ACROSS all applications — the cross-app catalogue?
+   *
+   * A distinct faculty, not `can(user, "read", <every app>)`: the question has no
+   * app to be about. It exists because the one read that names no app used to ask
+   * `can(user, "read", "*")`, and `"*"` was never a project — it was a placeholder
+   * for this missing question, compared with `includes` against a list of real app
+   * names and therefore false for everyone except an admin, by accident rather than
+   * by decision.
+   *
+   * It lives on the interface rather than in the route so the handler stays free of
+   * role checks: a bare `roles.includes(...)` in a route is authorisation logic
+   * outside the seam, which is what the seam exists to prevent. The phase-2
+   * PDP-backed implementation has to answer this question too.
+   */
+  canReadAcrossApps(user: PolicySubject): Promise<boolean>;
 }
 
 /** Phase-1 stand-in: pap-admin sees everything, others only their apps. */
 export class HardcodedProjectAccessPolicy implements ProjectAccessPolicy {
-  async can(
-    user: { sub: string; roles: string[]; apps: string[] },
-    _action: ProjectAction,
-    app: string,
-  ): Promise<boolean> {
+  async can(user: PolicySubject, _action: ProjectAction, app: string): Promise<boolean> {
     if (user.roles.includes("pap-admin")) return true;
     return user.apps.includes(app);
+  }
+
+  /**
+   * Only an administrator reads across applications. A caller scoped to apps —
+   * however many — is scoped: holding every app that happens to exist today is not
+   * the same statement as "may read the catalogue of what exists", and the second
+   * is the one this answers.
+   */
+  async canReadAcrossApps(user: PolicySubject): Promise<boolean> {
+    return user.roles.includes("pap-admin");
   }
 }
 

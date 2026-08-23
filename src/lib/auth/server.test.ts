@@ -297,3 +297,30 @@ describe("configurable claim paths", () => {
     await expect(projectAccess.can(user, "write", "records")).resolves.toBe(true);
   });
 });
+
+/*
+ * The cross-app faculty (pap-002 §2) — the question `can(user, action, app)` could
+ * not ask, and which the literal `"*"` stood in for.
+ */
+describe("canReadAcrossApps", () => {
+  const scoped = { sub: "s", roles: ["pap-author"], apps: ["records", "billing"] };
+  const admin = { sub: "s", roles: ["pap-admin"], apps: [] };
+
+  it("grants an administrator", async () => {
+    await expect(projectAccess.canReadAcrossApps(admin)).resolves.toBe(true);
+  });
+
+  it("refuses a scoped caller however many apps they hold", async () => {
+    // Holding every app that happens to exist today is not the same statement as
+    // "may read the catalogue of what exists" — this is the second one.
+    await expect(projectAccess.canReadAcrossApps(scoped)).resolves.toBe(false);
+  });
+
+  it("is not can(...) with a placeholder: an admin with no apps still passes", async () => {
+    // Under the old `can(user, "read", "*")`, an admin passed only through the
+    // role shortcut and everyone else was compared against a literal that is not
+    // an app. The faculty is now the question, not a side effect of one.
+    await expect(projectAccess.can(admin, "read", "records")).resolves.toBe(true);
+    await expect(projectAccess.can(scoped, "read", "*")).resolves.toBe(false);
+  });
+});
