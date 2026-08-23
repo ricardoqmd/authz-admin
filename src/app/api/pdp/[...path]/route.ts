@@ -14,7 +14,8 @@
  * policy — the seam is unchanged, it just receives a real user now.
  */
 import { type NextRequest, NextResponse } from "next/server";
-import { TokenError, type VerifiedUser, verifyCaller } from "@/lib/auth/server";
+import { authenticate } from "@/lib/auth/route-guard";
+import type { VerifiedUser } from "@/lib/auth/server";
 import { projectAccess } from "@/lib/authz/project-access";
 import { pdpFetch, UpstreamError } from "@/lib/pdp/server";
 
@@ -35,11 +36,138 @@ function upstreamProblem(error: unknown) {
 }
 
 /**
- * Read allowlist (R026): the cross-app catalog (`policies`) plus the nested
- * per-app surface (`apps/{app}/policies[...]`).
+ * The read surface, one entry per shape — the allowlist AND the app coordinate
+ * AND the recognised query parameters, in one place because they are one fact.
+ *
+ * The app is a ROUTE coordinate on every read that names one, exactly as it is on
+ * all five write call sites. It is captured from the SAME match that admits the
+ * path, so the app authorised and the app requested cannot diverge: `joined` is
+ * both what is matched here and what is forwarded upstream.
+ *
+ * `params` is measured against the PDP's own resources, not assumed — an
+ * unrecognised parameter is a 400 (see {@link buildQuery}), so a wrong entry here
+ * breaks a screen rather than silently widening the surface.
  */
-const READ_PATHS =
-  /^(policies|apps\/[a-z0-9-]+\/policies(\/[^/]+(\/versions(\/\d+)?)?)?)$/;
+type ReadShape = {
+  readonly pattern: RegExp;
+  /** Recognised query parameters for THIS path, in the order sent upstream. */
+  readonly params: readonly string[];
+};
+
+/**
+ * The one read that names no application: the cross-app catalogue (R026).
+ * `PolicyCatalogResource.list` — page, size, view, app, status.
+ *
+ * `?app=` stays available here because it narrows an administrator's view. It can
+ * never grant a scoped caller anything, because a scoped caller never gets past the
+ * faculty check on this path.
+ */
+const CROSS_APP_READ: ReadShape = {
+  pattern: /^policies$/,
+  params: ["page", "size", "view", "app", "status"],
+};
+
+/**
+ * Every read whose path carries an application. Anchored and mutually exclusive,
+ * so the first match is the only match; capture 1 is always the app.
+ *
+ * Upstream sources for `params`, read rather than assumed:
+ *   PolicyResource.list          page, size, view, status
+ *   PolicyResource.getById       (none)
+ *   PolicyResource.listVersions  page, size, view      — note: no `status`
+ *   PolicyResource.getVersion    (none)
+ *   ActionCatalogueResource      (none, both shapes)
+ *   AppConfigResource.get        (none)
+ */
+const APP_READS: readonly ReadShape[] = [
+  {
+    pattern: /^apps\/([a-z0-9-]+)\/policies$/,
+    params: ["page", "size", "view", "status"],
+  },
+  { pattern: /^apps\/([a-z0-9-]+)\/policies\/[^/]+$/, params: [] },
+  {
+    pattern: /^apps\/([a-z0-9-]+)\/policies\/[^/]+\/versions$/,
+    params: ["page", "size", "view"],
+  },
+  { pattern: /^apps\/([a-z0-9-]+)\/policies\/[^/]+\/versions\/\d+$/, params: [] },
+  { pattern: /^apps\/([a-z0-9-]+)\/action-catalogue$/, params: [] },
+  { pattern: /^apps\/([a-z0-9-]+)\/action-catalogue\/[a-z0-9-]+$/, params: [] },
+  { pattern: /^apps\/([a-z0-9-]+)\/configuration$/, params: [] },
+];
+
+/** What a matched read is: a faculty question, or a question about one app. */
+type ResolvedRead =
+  | { readonly kind: "cross-app"; readonly params: readonly string[] }
+  | { readonly kind: "app"; readonly app: string; readonly params: readonly string[] };
+
+/** Resolve a GET path to its shape, or null — which is the 404. */
+function resolveRead(joined: string): ResolvedRead | null {
+  if (CROSS_APP_READ.pattern.test(joined)) {
+    return { kind: "cross-app", params: CROSS_APP_READ.params };
+  }
+  for (const shape of APP_READS) {
+    const match = shape.pattern.exec(joined);
+    // biome-ignore lint/style/noNonNullAssertion: capture 1 exists in every APP_READS pattern.
+    if (match) return { kind: "app", app: match[1]!, params: shape.params };
+  }
+  return null;
+}
+
+/** The result of vetting the caller's query string against one shape's allowlist. */
+type QueryResult =
+  | { readonly ok: true; readonly search: string }
+  | { readonly ok: false; readonly code: string; readonly detail: string };
+
+/**
+ * Build the upstream query from the parameters this path recognises.
+ *
+ * The caller's query string is never forwarded: it is read, vetted and rebuilt.
+ *
+ * **Unrecognised parameters are rejected, not dropped.** Dropping makes a filter
+ * vanish silently — the caller gets a page of results that quietly ignores what
+ * they asked for. Rejecting fails loudly, and the only client is the UI in this
+ * repo, so a mismatch surfaces in this repo's own test run.
+ *
+ * A parameter valid on another path is still unrecognised here: `app` on a per-app
+ * route is a 400, because the app is already in the route and a second, disagreeing
+ * coordinate must never be silently ignored.
+ *
+ * Output order follows the allowlist, not the caller, so the upstream URL for a
+ * given set of parameters is deterministic whatever order they arrived in.
+ */
+function buildQuery(source: URLSearchParams, recognised: readonly string[]): QueryResult {
+  for (const name of source.keys()) {
+    if (!recognised.includes(name)) {
+      return {
+        ok: false,
+        code: "BFF_UNKNOWN_PARAMETER",
+        detail: `Query parameter "${name}" is not recognised on this path.`,
+      };
+    }
+  }
+
+  const out = new URLSearchParams();
+  for (const name of recognised) {
+    const values = source.getAll(name);
+    if (values.length === 0) continue;
+    // Repeated is ambiguous, so it is refused rather than resolved. Taking the
+    // first (or the last) would be this function silently choosing which of the
+    // caller's two answers it meant — the same silent-drop failure the unknown
+    // check above exists to avoid.
+    if (values.length > 1) {
+      return {
+        ok: false,
+        code: "BFF_REPEATED_PARAMETER",
+        detail: `Query parameter "${name}" was sent more than once.`,
+      };
+    }
+    // biome-ignore lint/style/noNonNullAssertion: length checked immediately above.
+    out.set(name, values[0]!);
+  }
+  const search = out.toString();
+  return { ok: true, search: search ? `?${search}` : "" };
+}
+
 /**
  * Write allowlist (POST): create, activate and deactivate under an app. The
  * second capture (lifecycle verb) doubles as the ProjectAccessPolicy action.
@@ -56,8 +184,6 @@ const EVALUATE_PATH = /^apps\/([a-z0-9-]+)\/evaluate$/;
  * — same authoring bar as create/edit, not the read bar of evaluate.
  */
 const SIMULATE_PATH = /^apps\/([a-z0-9-]+)\/policies:simulate$/;
-/** Action catalogue (R028). Read: list + one entry. */
-const CATALOGUE_READ = /^apps\/[a-z0-9-]+\/action-catalogue(\/[a-z0-9-]+)?$/;
 /** Catalogue create (POST): a new entry for a resourceType under the app. */
 const CATALOGUE_CREATE_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue$/;
 /** Catalogue item (PUT replace / DELETE): one entry, conditional (If-Match). */
@@ -70,56 +196,19 @@ const CATALOGUE_ITEM_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue\/[a-z0-9-]+$/
 const CONFIG_PATH = /^apps\/([a-z0-9-]+)\/configuration$/;
 
 /**
- * Authenticate the caller, or produce the response that refuses them.
+ * The read denial — ONE body for both read shapes.
  *
- * Returns the verified user on success and a ready-to-send NextResponse on
- * failure, so a handler cannot forget to stop: `instanceof NextResponse` is
- * the only way past it. Fail closed — there is no path through this function
- * that yields a user without a verified token.
- *
- * A misconfigured deployment answers 500, never 401 and never "allow": a
- * missing env var is our fault, not the caller's, and must not be mistakable
- * for a bad token in the logs.
+ * A caller refused the cross-app catalogue and a caller refused one application
+ * receive byte-identical answers, with no `detail`. The writes name the app they
+ * refused, which is safe there because the caller put it in the route themselves;
+ * here, distinguishing "you may not read across apps" from "you may not read app
+ * X" would tell a prober which applications exist, one request at a time.
  */
-async function authenticate(req: NextRequest): Promise<VerifiedUser | NextResponse> {
-  try {
-    return await verifyCaller(req);
-  } catch (error) {
-    if (!(error instanceof TokenError)) throw error;
-    if (error.reason === "misconfigured") {
-      console.error(`[pap-bff] ${error.message}`);
-      return NextResponse.json(
-        {
-          title: "Server misconfigured",
-          status: 500,
-          code: "BFF_MISCONFIGURED",
-          detail: "Caller token verification is not configured.",
-        },
-        { status: 500 },
-      );
-    }
-    // Server-side only, and only the reason: no token, no claim, no subject.
-    // Without it the first production 401 is undiagnosable; with anything more
-    // than the reason it becomes a leak.
-    console.warn(`[pap-bff] rejected caller: ${error.reason}`);
-    // One body for every rejection reason. Which check failed (absent,
-    // expired, bad signature, wrong client) stays server-side: telling an
-    // anonymous caller narrows their next guess for free. Never echo the
-    // token or any claim.
-    return NextResponse.json(
-      {
-        title: "Unauthorized",
-        status: 401,
-        code: "UNAUTHENTICATED",
-        detail: "A valid Bearer token is required.",
-      },
-      // RFC 6750 §3: a bearer-token resource announces the scheme on a 401.
-      // Header only — bare `Bearer`, with no realm or error code, so the body
-      // stays byte-identical across all four rejection reasons and the header
-      // does not become the side channel the body refuses to be.
-      { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
-    );
-  }
+function readDenied() {
+  return NextResponse.json(
+    { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
+    { status: 403 },
+  );
 }
 
 export async function GET(
@@ -134,32 +223,37 @@ export async function GET(
   const { path } = await params;
   const joined = path.join("/");
 
-  if (
-    !READ_PATHS.test(joined) &&
-    !CATALOGUE_READ.test(joined) &&
-    !CONFIG_PATH.test(joined)
-  ) {
+  const read = resolveRead(joined);
+  if (!read) {
     return NextResponse.json(
       { title: "Not found", status: 404, code: "BFF_UNKNOWN_PATH" },
       { status: 404 },
     );
   }
 
-  // Enforcement seam. For list endpoints the app filter is applied client-side
-  // in phase 1 (the PDP has no ?app filter yet); per-policy reads could check
-  // projectOf(resourceType) here once reads are gated too.
-  const allowed = await projectAccess.can(caller, "read", "*");
-  if (!allowed) {
+  // Enforcement seam, per read shape. A read that names an application is
+  // authorised against THAT application, from the route; the one read that names
+  // none asks the faculty question instead. There is no wildcard app and no role
+  // check here — both live behind ProjectAccessPolicy.
+  const allowed =
+    read.kind === "cross-app"
+      ? await projectAccess.canReadAcrossApps(caller)
+      : await projectAccess.can(caller, "read", read.app);
+  if (!allowed) return readDenied();
+
+  // After the gate, deliberately: a caller who may not read this at all learns
+  // nothing about which parameters it would have accepted.
+  const query = buildQuery(req.nextUrl.searchParams, read.params);
+  if (!query.ok) {
     return NextResponse.json(
-      { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
-      { status: 403 },
+      { title: "Bad request", status: 400, code: query.code, detail: query.detail },
+      { status: 400 },
     );
   }
 
-  const search = req.nextUrl.search;
   let res: Response;
   try {
-    res = await pdpFetch(`/v1/${joined}${search}`);
+    res = await pdpFetch(`/v1/${joined}${query.search}`);
   } catch (error) {
     return upstreamProblem(error);
   }
