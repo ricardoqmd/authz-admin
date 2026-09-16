@@ -10,8 +10,16 @@
  *
  * Step 1 is done: every handler derives its caller from a verified token
  * before anything else runs, so the BFF never spends its credential on an
- * unauthenticated request. Step 2 still ships the permissive hardcoded
- * policy — the seam is unchanged, it just receives a real user now.
+ * unauthenticated request.
+ *
+ * Step 2 is enforced as well, and is no longer permissive: every read and
+ * every write passes through ProjectAccessPolicy, a read that names an
+ * application is authorised against THAT application, and the one read that
+ * names none asks the faculty question instead. What is still pending is only
+ * the implementation behind the seam — HardcodedProjectAccessPolicy answers
+ * from the caller's own claims, where EvaluateProjectAccessPolicy will answer
+ * from the PDP's meta-policy. Consumers see no difference when it is swapped;
+ * that is what the seam is for.
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { authenticate } from "@/lib/auth/route-guard";

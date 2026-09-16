@@ -75,8 +75,10 @@ describe("EditPolicyScreen — append new version (PUT)", () => {
     await user.click(screen.getByText(/Guardar como v2/));
 
     await waitFor(() => expect(received).not.toBeNull());
-    // Next version number and the head revision as ETag.
-    expect(received!.version).toBe(2);
-    expect(received!.ifMatch).toBe('"4"');
+    // Next version number and the head revision as ETag. Asserted on the whole
+    // object rather than field by field: there is no non-null assertion to make,
+    // and a field that appeared here later would have to be accounted for
+    // instead of passing unnoticed.
+    expect(received).toEqual({ version: 2, ifMatch: '"4"' });
   });
 });
