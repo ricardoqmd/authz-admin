@@ -320,11 +320,45 @@ describe("BFF read gate — the cross-app catalogue is its own faculty", () => {
   it("refuses it in a body byte-identical to a per-app refusal", async () => {
     // Distinguishable bodies would let a prober map which applications exist,
     // one request at a time.
+    //
+    // NOTE: this comparison is a second net, NOT the property. Both bodies come
+    // out of readDenied(), so anything added there changes them together and
+    // this assertion stays green while the channel reopens. The property itself
+    // is pinned by the two tests below, against the refusal's own shape.
     const crossApp = await get("policies", await scopedToken(["records"]));
     const perApp = await get("apps/billing/policies", await scopedToken(["records"]));
 
     expect(crossApp.status).toBe(perApp.status);
     await expect(crossApp.json()).resolves.toEqual(await perApp.json());
+  });
+
+  /*
+   * A property of NOT leaking is asserted by the ABSENCE of the field that would
+   * leak — never by two outputs of the same function agreeing with each other.
+   * The exact key set is what makes it fail: adding `detail`, or an app name, or
+   * anything else to readDenied() breaks this and only this.
+   */
+  it("carries no field beyond the three, so none can name the refused app", async () => {
+    const refusals = [
+      await get("apps/billing/policies", await scopedToken(["records"])),
+      await get("policies", await scopedToken(["records"])),
+    ];
+
+    for (const refusal of refusals) {
+      expect(refusal.status).toBe(403);
+      const body = (await refusal.json()) as Record<string, unknown>;
+      expect(Object.keys(body).sort()).toEqual(["code", "status", "title"]);
+    }
+  });
+
+  it("never echoes the application it refused, in the body or in a header", async () => {
+    // "billing" is the app in the route and the one fact a prober is after: it
+    // must not come back, in any field, under any name.
+    const res = await get("apps/billing/policies", await scopedToken(["records"]));
+
+    expect(res.status).toBe(403);
+    await expect(res.text()).resolves.not.toContain("billing");
+    expect(JSON.stringify([...res.headers])).not.toContain("billing");
   });
 
   it("asks the faculty question, not `can` with a placeholder app", async () => {
