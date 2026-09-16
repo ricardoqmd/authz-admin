@@ -10,6 +10,23 @@
  * To plug a different OIDC client (keycloak-js, oidc-client-ts, Auth0 SPA SDK):
  * add one file under ./adapters implementing AuthApi, add its case below. That
  * is the whole extension surface — no plugin framework on purpose.
+ *
+ * WHY THIS ONE STAYS A BUILD-TIME FLAG. Everything else the browser needs and
+ * that varies between deployments now comes from the runtime configuration
+ * (@/lib/config/public), so one image can serve every environment. The adapter
+ * is the deliberate exception, for two reasons that point the same way:
+ *
+ *   - A build that does not compile the mock in cannot be talked into using it.
+ *     Making the choice configurable would turn "the mock cannot ship" from a
+ *     property of the artifact into a property of a deployment's environment
+ *     file — the weaker of the two, and the one nobody checks.
+ *   - The selection is read once, at module scope, so the hook chosen below is
+ *     stable for the lifetime of the app. A value that could change between
+ *     renders cannot pick a hook.
+ *
+ * The adapter therefore distinguishes one KIND of build (the real one, and a
+ * demo one) rather than one environment from another, and promoting a single
+ * artifact across environments stays true.
  */
 import type { ReactNode } from "react";
 import { MockAuthProvider, useMockAuth } from "./adapters/mock";
