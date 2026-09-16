@@ -53,6 +53,20 @@ src/
 
 Tokens in dev: Quarkus Dev UI -> `http://localhost:8080/q/dev` -> OIDC.
 
+## Deploy
+
+The image is built once and the same artifact is promoted through every
+environment, so nothing environment-specific is compiled into the bundle:
+browser-side configuration is read on the server per request and passed down as
+props. `docs/deployment.md` has the build and run commands, the full list of
+what is runtime and what is build-time, and what a deployment today does and
+does not serve.
+
+```bash
+docker build -t pap:$(git rev-parse --short HEAD) .
+docker run --rm -p 3000:3000 --env-file .env pap:$(git rev-parse --short HEAD)
+```
+
 ## Typed client
 
 Contracts in `src/lib/pdp/contracts.ts` are hand-written from the documented

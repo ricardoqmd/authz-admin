@@ -1,0 +1,19 @@
+# Everything the build does not need, kept out of the context so the image is
+# smaller and so nothing local can leak into it.
+.git
+.github
+node_modules
+.next
+coverage
+*.tsbuildinfo
+
+# Local environment files. The image takes its configuration from the
+# container's environment, never from a file copied in at build time.
+.env
+.env.*
+!.env.example
+
+.claude
+.idea
+.vscode
+.DS_Store

@@ -18,34 +18,46 @@ import {
  *   sub   ← token.sub (opaque Keycloak subject; never PII)
  *   roles ← normalized realm roles, filtered to the PAP's own ("pap-*")
  *   apps  ← "authz_apps" claim (group-populated in Keycloak; see ADR P001)
+ *
+ * The IdP coordinates come from the RUNTIME configuration, not from the build
+ * (see @/lib/config/public). They are the values that differ between one
+ * deployment of this image and the next, and an image that carries them baked
+ * in is an image that can only ever serve one of them.
  */
 import type { ReactNode } from "react";
+import { usePublicConfig } from "@/lib/config/context";
+import type { KeycloakPublicConfig } from "@/lib/config/public";
 import type { AuthApi, SessionUser } from "../types";
 
 /**
- * Lazy module singleton. The library requires ONE provider per application,
- * created outside render; making it lazy (instead of a top-level const) means
- * merely importing this module — e.g. while running with the mock adapter —
- * never instantiates keycloak-js.
+ * The library requires ONE provider per application, created outside render.
+ * Keying this cache by the coordinates preserves that — the same configuration
+ * always yields the same instance, however many times it is asked for — while
+ * allowing the coordinates themselves to be decided at runtime. Merely
+ * importing this module, e.g. while running with the mock adapter, still
+ * instantiates nothing.
+ *
+ * The cache is why the component below needs no `useMemo`: memoising a lookup
+ * that is already idempotent buys nothing and only adds a dependency list to
+ * keep correct.
  */
-let provider: ReturnType<typeof createKeycloakProvider> | null = null;
+const providers = new Map<string, ReturnType<typeof createKeycloakProvider>>();
 
-function getProvider() {
-  provider ??= createKeycloakProvider({
-    // Authorization Code + PKCE — the right flow for a public SPA client.
-    pkceMethod: "S256",
-    config: {
-      url: requiredEnv("NEXT_PUBLIC_KEYCLOAK_URL", process.env.NEXT_PUBLIC_KEYCLOAK_URL),
-      realm: requiredEnv(
-        "NEXT_PUBLIC_KEYCLOAK_REALM",
-        process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
-      ),
-      clientId: requiredEnv(
-        "NEXT_PUBLIC_KEYCLOAK_CLIENT_ID",
-        process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
-      ),
-    },
-  });
+function getProvider(config: KeycloakPublicConfig) {
+  const key = `${config.url}|${config.realm}|${config.clientId}`;
+  let provider = providers.get(key);
+  if (!provider) {
+    provider = createKeycloakProvider({
+      // Authorization Code + PKCE — the right flow for a public SPA client.
+      pkceMethod: "S256",
+      config: {
+        url: config.url,
+        realm: config.realm,
+        clientId: config.clientId,
+      },
+    });
+    providers.set(key, provider);
+  }
   return provider;
 }
 
@@ -57,8 +69,19 @@ function requiredEnv(name: string, value: string | undefined): string {
   return value;
 }
 
+function required(keycloak: Partial<KeycloakPublicConfig>): KeycloakPublicConfig {
+  return {
+    url: requiredEnv("PAP_PUBLIC_KEYCLOAK_URL", keycloak.url),
+    realm: requiredEnv("PAP_PUBLIC_KEYCLOAK_REALM", keycloak.realm),
+    clientId: requiredEnv("PAP_PUBLIC_KEYCLOAK_CLIENT_ID", keycloak.clientId),
+  };
+}
+
 export function RicardoqmdAuthProvider({ children }: { children: ReactNode }) {
-  return <CoreAuthProvider provider={getProvider()}>{children}</CoreAuthProvider>;
+  const { keycloak } = usePublicConfig();
+  const provider = getProvider(required(keycloak));
+
+  return <CoreAuthProvider provider={provider}>{children}</CoreAuthProvider>;
 }
 
 /** Claims beyond the normalized set; the PAP only cares about authz_apps. */
