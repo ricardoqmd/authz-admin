@@ -20,7 +20,9 @@ request**, and hands it to the client as props:
 
 - `src/lib/config/public.ts` reads the environment;
 - the root layout passes the result into `PublicConfigProvider`;
-- client code calls `usePublicConfig()` and never `process.env`.
+- client code calls `usePublicConfig()` for these values rather than
+  `process.env` — with one exception, the two build flags below, which client
+  code does read from `process.env` precisely because they are inlined.
 
 ## What is runtime and what is build-time
 
@@ -30,17 +32,38 @@ request**, and hands it to the client as props:
 | `PAP_PUBLIC_KEYCLOAK_URL` / `_REALM` / `_CLIENT_ID` | runtime | differ per environment and the browser needs them |
 | `PAP_DEFAULT_LOCALE` | runtime | resolved on the server; never needed in the bundle |
 | `NEXT_PUBLIC_AUTH_ADAPTER` | **build** | see below |
+| `NEXT_PUBLIC_ALLOW_MOCK_AUTH` | **build** | inlined like the adapter; a demo image needs **both** |
 
-The adapter is the deliberate exception. It selects which implementation is
-**compiled in**, so a production image simply does not contain the mock and
-cannot be configured into using it. Making it runtime would move "the mock
-cannot ship" from a property of the artifact to a line in a deployment's
-environment file — the weaker of the two, and the one nobody re-reads. It also
-distinguishes one *kind* of build from another rather than one environment from
-another, so promoting a single artifact across environments stays true.
+The adapter is the deliberate exception, and it is a choice rather than a
+necessity. What it buys: the selection is inlined, so **no runtime path reaches
+the adapter that was not selected**, and the guard in `src/lib/auth/index.tsx`
+throws in the browser if one ever did.
+
+What it does **not** buy, stated because an earlier version of this document
+claimed otherwise: a production image still **contains** the mock. A grep of the
+built client chunks finds it, because a bundler cannot prove that a branch on an
+inlined constant is dead. The guarantee is *unreachable*, not *absent*. Making it
+absent would need a build-time module alias — bundler configuration that
+development and production do not necessarily share, which is a worse class of
+defect than the one it would close.
+
+The honest reason to keep it at build time is therefore the modest one: it does
+not need to vary per environment, and making it vary would add one more setting
+that can be wrong in a way that silently weakens authentication.
 
 Nothing may be added to the `PAP_PUBLIC_*` family except values that are public
 by nature: that object is serialised into the HTML the server sends.
+
+## Startup
+
+The process **refuses to start** when the image was built with the real adapter
+and any of the three `PAP_PUBLIC_KEYCLOAK_*` values is missing: it logs which
+ones and exits (`src/instrumentation.ts`). A configuration mistake that surfaced
+only on the first render would otherwise leave a container that a scheduler
+reports as healthy while every page it serves is a 500.
+
+Setting one of the four names retired in this change logs a warning naming its
+replacement, rather than being ignored in silence.
 
 ## Build
 
@@ -51,10 +74,15 @@ docker build -t pap:<git-commit> .
 Tag with the immutable commit, not with a moving name: the tag is how the digest
 is found again, and a tag that moves cannot identify what was promoted.
 
-For a demo build with the simulated session:
+For a demo build with the simulated session, **both** flags are needed. The
+adapter selects the mock; the second one satisfies the guard that otherwise
+throws in the browser because the image is a production build:
 
 ```bash
-docker build --build-arg NEXT_PUBLIC_AUTH_ADAPTER=mock -t pap:demo .
+docker build \
+  --build-arg NEXT_PUBLIC_AUTH_ADAPTER=mock \
+  --build-arg NEXT_PUBLIC_ALLOW_MOCK_AUTH=true \
+  -t pap:demo .
 ```
 
 ## Run
@@ -63,10 +91,14 @@ docker build --build-arg NEXT_PUBLIC_AUTH_ADAPTER=mock -t pap:demo .
 docker run --rm -p 3000:3000 --env-file .env pap:<git-commit>
 ```
 
-`.env.example` lists every variable with what it is for. The three
-`PAP_PUBLIC_KEYCLOAK_*` values are required when the image was built with the
-real adapter; the adapter refuses to start without them and names the one that
-is missing rather than degrading to a broken login.
+`.env.example` lists every variable with what it is for, and deliberately puts
+every explanation on its own line: `--env-file` does **not** strip trailing
+comments, so `NAME=   # explanation` is read as the literal value
+`# explanation`.
+
+The three `PAP_PUBLIC_KEYCLOAK_*` values are required when the image was built
+with the real adapter; see **Startup** above for what happens when one is
+missing.
 
 ## Health
 
@@ -85,11 +117,22 @@ Read this before announcing the console to anyone.
 
 Every read is authorised against the application in its own route, and the
 cross-application listing answers `403` to a caller without the platform role.
-Nothing in the UI consumes `/api/session` yet, and the policy list still queries
-the cross-application collection.
+Nothing in the UI consumes `/api/session` yet, and **three** screens still query
+the cross-application collection: the policy list, which is the one that breaks,
+plus the catalogue and configuration screens, which call it only to suggest known
+applications and therefore degrade to an empty list rather than failing.
 
 **A deployment today therefore serves platform administrators.** Per-application
 administrators can be authorised by the API but will not get a usable screen
 until the listing takes its application from the route. That is acceptable while
 the console is operated by the platform team; it is not acceptable to announce to
 per-application administrators.
+
+## A gap this test suite does not close
+
+The whole suite runs under the **mock** adapter, which is what lets it render
+screens without an identity provider. The consequence is worth stating rather
+than discovering: **no test exercises the real adapter's path.** That it
+initialises, refreshes a token and maps claims correctly is reasoning, not
+measurement. Closing it needs a test that mints real tokens against an identity
+provider; until someone does, this paragraph is the declaration that it is open.

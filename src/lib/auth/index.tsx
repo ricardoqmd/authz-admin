@@ -14,19 +14,30 @@
  * WHY THIS ONE STAYS A BUILD-TIME FLAG. Everything else the browser needs and
  * that varies between deployments now comes from the runtime configuration
  * (@/lib/config/public), so one image can serve every environment. The adapter
- * is the deliberate exception, for two reasons that point the same way:
+ * is the deliberate exception, and it is a CHOICE, not a necessity — the
+ * reasoning is worth stating exactly, because an earlier version of this comment
+ * overstated it and someone would have relied on the overstatement.
  *
- *   - A build that does not compile the mock in cannot be talked into using it.
- *     Making the choice configurable would turn "the mock cannot ship" from a
- *     property of the artifact into a property of a deployment's environment
- *     file — the weaker of the two, and the one nobody checks.
- *   - The selection is read once, at module scope, so the hook chosen below is
- *     stable for the lifetime of the app. A value that could change between
- *     renders cannot pick a hook.
+ * What is true: the selection is inlined by the bundler, so no runtime path
+ * reaches the adapter that was not selected. Add the guard below and a mock
+ * build cannot be served as a production one by accident.
  *
- * The adapter therefore distinguishes one KIND of build (the real one, and a
- * demo one) rather than one environment from another, and promoting a single
- * artifact across environments stays true.
+ * What is NOT true, and was claimed here before: that a production image does
+ * not CONTAIN the mock. It does. A grep of the built client chunks finds this
+ * module's strings, because a bundler cannot prove that a branch on an inlined
+ * constant is dead. The guarantee is UNREACHABLE, not ABSENT, and the two are
+ * different promises. Making it absent needs a build-time module alias, which is
+ * bundler configuration that dev and production do not necessarily share — a
+ * worse class of defect than the one it would close.
+ *
+ * So the honest reason to keep it at build time is the modest one: this value
+ * does not need to vary per environment, and making it vary would add one more
+ * setting that can be wrong in a way that silently weakens authentication.
+ * Revisit if someone outside this team ever builds the image.
+ *
+ * (The module-scope read also keeps the hook chosen below stable, which is
+ * convenient — but it is a consequence of the decision, not a reason for it: a
+ * runtime adapter could keep hooks stable by other means.)
  */
 import type { ReactNode } from "react";
 import { MockAuthProvider, useMockAuth } from "./adapters/mock";
