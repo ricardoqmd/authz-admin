@@ -1,10 +1,15 @@
 /*
  * ProjectAccessPolicy — the enforcement seam of the PAP BFF (model D).
  *
- * Every write (and optionally read) against the PDP goes through this check.
- * Phase 1 ships a permissive hardcoded implementation; the target
- * implementation asks the PDP itself via POST /v1/evaluate against the
- * seeded meta-policy ("pap-project-access", resourceType "policy"):
+ * Every read and every write against the PDP goes through this check — a read
+ * that names an application is authorised against THAT application, and the one
+ * read that names none asks the faculty question below.
+ *
+ * Phase 1 ships a hardcoded implementation. It is not permissive: it denies a
+ * caller that does not hold the application. What it lacks is the source of the
+ * answer — it reads the caller's own claims, where the target implementation
+ * asks the PDP itself via POST /v1/evaluate against the seeded meta-policy
+ * ("pap-project-access", resourceType "policy"):
  *
  *   { action: "policy:read" | "policy:write" | ...,
  *     resource: { type: "policy", attributes: { app } },
