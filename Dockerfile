@@ -21,12 +21,20 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-# The ONE value this image bakes, and it is not an environment: it selects
-# which auth adapter is compiled in. A production image is built with the real
-# adapter and therefore cannot be configured into using the mock. See
-# src/lib/auth/index.tsx for why this one is deliberately not runtime.
+# The TWO values this image bakes, and neither is an environment: together they
+# decide which auth adapter the bundle can reach. Both are inlined by Next at
+# build time, so both must be build arguments — a container that sets them at
+# run time changes nothing.
+#
+# What the default gives you: the bundle still CONTAINS the mock adapter (the
+# bundler cannot prove a branch on an inlined constant is dead), but no runtime
+# path reaches it, and the guard in src/lib/auth/index.tsx throws in the browser
+# if one ever did. See that file for why this is a choice rather than a
+# necessity, and docs/deployment.md for the demo build.
 ARG NEXT_PUBLIC_AUTH_ADAPTER=ricardoqmd-auth
-ENV NEXT_PUBLIC_AUTH_ADAPTER=${NEXT_PUBLIC_AUTH_ADAPTER}
+ARG NEXT_PUBLIC_ALLOW_MOCK_AUTH=
+ENV NEXT_PUBLIC_AUTH_ADAPTER=${NEXT_PUBLIC_AUTH_ADAPTER} \
+    NEXT_PUBLIC_ALLOW_MOCK_AUTH=${NEXT_PUBLIC_ALLOW_MOCK_AUTH}
 RUN pnpm build
 
 # ---------- runtime ----------
@@ -46,9 +54,10 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 # Static assets and public files are NOT part of the standalone trace.
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
-# Translations are loaded through a dynamic import whose specifier is built at
-# runtime, so they are copied explicitly rather than relied on being traced.
-COPY --from=build --chown=nextjs:nodejs /app/messages ./messages
+# There is deliberately no COPY of messages/. An earlier revision copied it
+# "in case the dynamic import is not traced"; deleting those JSON files from a
+# running container was measured to change nothing, because the standalone trace
+# already carries them. The copy was dead weight and its justification was false.
 
 USER nextjs
 EXPOSE 3000
