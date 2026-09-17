@@ -20,7 +20,7 @@ vi.mock("@/lib/pdp/server", () => ({
 }));
 
 const { pdpFetch } = await import("@/lib/pdp/server");
-const { GET, POST } = await import("./route");
+const { GET, POST, PUT, DELETE } = await import("./route");
 
 const upstream = vi.mocked(pdpFetch);
 
@@ -57,6 +57,46 @@ function post(path: string, token?: string) {
     }),
     { params: Promise.resolve({ path: path.split("/") }) },
   );
+}
+
+function put(path: string, token?: string) {
+  return PUT(
+    new NextRequest(`http://pap.test/api/pdp/${path}`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: "{}",
+    }),
+    { params: Promise.resolve({ path: path.split("/") }) },
+  );
+}
+
+function del(path: string, token?: string) {
+  return DELETE(
+    new NextRequest(`http://pap.test/api/pdp/${path}`, {
+      method: "DELETE",
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+    }),
+    { params: Promise.resolve({ path: path.split("/") }) },
+  );
+}
+
+/** Every verb the door exposes, so a table can name one per row. */
+const SEND = { get, post, put, delete: del } as const;
+
+/**
+ * The whole response, as it goes on the wire. Asserting a refusal against this
+ * is what makes a header, a status or a value inside an allowed key fail —
+ * none of which the body's key names can see.
+ */
+async function onTheWire(res: Response) {
+  return {
+    status: res.status,
+    headers: [...res.headers],
+    body: await res.text(),
+  };
 }
 
 beforeEach(async () => {
@@ -317,50 +357,6 @@ describe("BFF read gate — the cross-app catalogue is its own faculty", () => {
     expect(upstream).toHaveBeenCalledWith("/v1/policies");
   });
 
-  it("refuses it in a body byte-identical to a per-app refusal", async () => {
-    // Distinguishable bodies would let a prober map which applications exist,
-    // one request at a time.
-    //
-    // NOTE: this comparison is a second net, NOT the property. Both bodies come
-    // out of readDenied(), so anything added there changes them together and
-    // this assertion stays green while the channel reopens. The property itself
-    // is pinned by the two tests below, against the refusal's own shape.
-    const crossApp = await get("policies", await scopedToken(["records"]));
-    const perApp = await get("apps/billing/policies", await scopedToken(["records"]));
-
-    expect(crossApp.status).toBe(perApp.status);
-    await expect(crossApp.json()).resolves.toEqual(await perApp.json());
-  });
-
-  /*
-   * A property of NOT leaking is asserted by the ABSENCE of the field that would
-   * leak — never by two outputs of the same function agreeing with each other.
-   * The exact key set is what makes it fail: adding `detail`, or an app name, or
-   * anything else to readDenied() breaks this and only this.
-   */
-  it("carries no field beyond the three, so none can name the refused app", async () => {
-    const refusals = [
-      await get("apps/billing/policies", await scopedToken(["records"])),
-      await get("policies", await scopedToken(["records"])),
-    ];
-
-    for (const refusal of refusals) {
-      expect(refusal.status).toBe(403);
-      const body = (await refusal.json()) as Record<string, unknown>;
-      expect(Object.keys(body).sort()).toEqual(["code", "status", "title"]);
-    }
-  });
-
-  it("never echoes the application it refused, in the body or in a header", async () => {
-    // "billing" is the app in the route and the one fact a prober is after: it
-    // must not come back, in any field, under any name.
-    const res = await get("apps/billing/policies", await scopedToken(["records"]));
-
-    expect(res.status).toBe(403);
-    await expect(res.text()).resolves.not.toContain("billing");
-    expect(JSON.stringify([...res.headers])).not.toContain("billing");
-  });
-
   it("asks the faculty question, not `can` with a placeholder app", async () => {
     const can = vi.spyOn(projectAccess, "can");
     const faculty = vi.spyOn(projectAccess, "canReadAcrossApps");
@@ -478,6 +474,192 @@ describe("BFF read gate — the upstream query is built, not forwarded", () => {
     );
 
     expect(res.status).toBe(403);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * What a refusal may and may not depend on.
+ *
+ * The caller learns nothing from being shown the application it named — it wrote
+ * that name itself. What it must not learn is whether that application EXISTS:
+ * a refusal that answers differently for a real one and for an invented one is
+ * an oracle, and a dictionary of names turns it into the whole inventory.
+ *
+ * So the assertion is the whole response on the wire, fixed to a literal, and
+ * exercised with an application that appears in no fixture. That is what a key
+ * set cannot do: it sees neither a distinguishing header, nor a status that
+ * varies, nor a different value inside a key it permits.
+ */
+const NONEXISTENT_APP = "zz-nonce-7f3a";
+
+const READ_REFUSAL = {
+  status: 403,
+  headers: [["content-type", "application/json"]],
+  body: '{"title":"Forbidden","status":403,"code":"PROJECT_ACCESS_DENIED"}',
+};
+
+describe("BFF refusal — one constant, and it does not depend on what exists", () => {
+  const REFUSED_READS = [
+    { what: "the cross-application catalogue", verb: "get", path: "policies" },
+    {
+      what: "an application the caller may not read",
+      verb: "get",
+      path: "apps/billing/policies",
+    },
+    {
+      what: "an application that does not exist",
+      verb: "get",
+      path: `apps/${NONEXISTENT_APP}/policies`,
+    },
+    {
+      what: "the configuration of one that does not exist",
+      verb: "get",
+      path: `apps/${NONEXISTENT_APP}/configuration`,
+    },
+    {
+      what: "evaluate under one that does not exist",
+      verb: "post",
+      path: `apps/${NONEXISTENT_APP}/evaluate`,
+    },
+  ] as const;
+
+  it.each(REFUSED_READS)("$what answers the same bytes", async ({ verb, path }) => {
+    const res = await SEND[verb](path, await scopedToken(["records"]));
+
+    expect(await onTheWire(res)).toEqual(READ_REFUSAL);
+    // The point of the gate, restated per surface: a refused caller never costs
+    // the BFF its administrative credential.
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it("answers a real application and an invented one identically", async () => {
+    // The two halves above, compared directly as well — not as the property,
+    // which the literal above already fixes, but because this is the sentence a
+    // reader will want to see stated once.
+    const real = await get("apps/billing/policies", await scopedToken(["records"]));
+    const invented = await get(
+      `apps/${NONEXISTENT_APP}/policies`,
+      await scopedToken(["records"]),
+    );
+
+    expect(await onTheWire(real)).toEqual(await onTheWire(invented));
+  });
+});
+
+/*
+ * The write gates.
+ *
+ * Removing the authorisation check from any of these used to leave the suite
+ * entirely green. The BFF is the only door to the PDP that carries the
+ * administrative credential, so a regression that opens one write to a caller
+ * without the application had nothing watching it.
+ *
+ * The refusal here DOES name the application, and that is safe under the rule
+ * above: it is an echo of the route the caller wrote, not a function of what
+ * exists. The assertion still fixes the whole wire response, so the day it
+ * starts depending on anything else, this fails.
+ */
+function writeRefusal(app: string) {
+  return {
+    status: 403,
+    headers: [["content-type", "application/json"]],
+    body: JSON.stringify({
+      title: "Forbidden",
+      status: 403,
+      code: "PROJECT_ACCESS_DENIED",
+      detail: `You have no write access to project "${app}".`,
+    }),
+  };
+}
+
+const WRITE_SURFACES = [
+  { verb: "post", path: (a: string) => `apps/${a}/policies`, what: "create a policy" },
+  {
+    verb: "post",
+    path: (a: string) => `apps/${a}/policies/p-1/activate`,
+    what: "activate a policy",
+  },
+  {
+    verb: "post",
+    path: (a: string) => `apps/${a}/policies/p-1/deactivate`,
+    what: "deactivate a policy",
+  },
+  {
+    verb: "post",
+    path: (a: string) => `apps/${a}/policies:simulate`,
+    what: "simulate a policy",
+  },
+  {
+    verb: "post",
+    path: (a: string) => `apps/${a}/action-catalogue`,
+    what: "create a catalogue entry",
+  },
+  {
+    verb: "post",
+    path: (a: string) => `apps/${a}/configuration`,
+    what: "create the configuration",
+  },
+  {
+    verb: "put",
+    path: (a: string) => `apps/${a}/policies/p-1`,
+    what: "append a version",
+  },
+  {
+    verb: "put",
+    path: (a: string) => `apps/${a}/action-catalogue/doc-1`,
+    what: "replace a catalogue entry",
+  },
+  {
+    verb: "put",
+    path: (a: string) => `apps/${a}/configuration`,
+    what: "replace the configuration",
+  },
+  {
+    verb: "delete",
+    path: (a: string) => `apps/${a}/action-catalogue/doc-1`,
+    what: "delete a catalogue entry",
+  },
+  {
+    verb: "delete",
+    path: (a: string) => `apps/${a}/configuration`,
+    what: "delete the configuration",
+  },
+] as const;
+
+describe("BFF write gate — every write is authorised against its route's app", () => {
+  it.each(
+    WRITE_SURFACES,
+  )("$what — a caller without the application is refused, PDP never contacted", async ({
+    verb,
+    path,
+  }) => {
+    const res = await SEND[verb](path("billing"), await scopedToken(["records"]));
+
+    expect(await onTheWire(res)).toEqual(writeRefusal("billing"));
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    WRITE_SURFACES,
+  )("$what — a caller holding the application gets through", async ({ verb, path }) => {
+    // The positive control. Without it, every row above would also pass on a
+    // door that refuses everyone, and a gate that never opens is not a gate.
+    const res = await SEND[verb](path("records"), await scopedToken(["records"]));
+
+    expect(res.status).toBe(200);
+    expect(upstream).toHaveBeenCalled();
+  });
+
+  it.each(
+    WRITE_SURFACES,
+  )("$what — an application that does not exist is refused the same way", async ({
+    verb,
+    path,
+  }) => {
+    const res = await SEND[verb](path(NONEXISTENT_APP), await scopedToken(["records"]));
+
+    expect(await onTheWire(res)).toEqual(writeRefusal(NONEXISTENT_APP));
     expect(upstream).not.toHaveBeenCalled();
   });
 });

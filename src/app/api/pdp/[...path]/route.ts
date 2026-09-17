@@ -204,13 +204,19 @@ const CATALOGUE_ITEM_PATH = /^apps\/([a-z0-9-]+)\/action-catalogue\/[a-z0-9-]+$/
 const CONFIG_PATH = /^apps\/([a-z0-9-]+)\/configuration$/;
 
 /**
- * The read denial — ONE body for both read shapes.
+ * The read denial — ONE response for every refused read, including evaluate.
  *
- * A caller refused the cross-app catalogue and a caller refused one application
- * receive byte-identical answers, with no `detail`. The writes name the app they
- * refused, which is safe there because the caller put it in the route themselves;
- * here, distinguishing "you may not read across apps" from "you may not read app
- * X" would tell a prober which applications exist, one request at a time.
+ * What must not leak is not the application the caller named: the caller wrote
+ * it themselves and learns nothing from seeing it again. What must not leak is
+ * whether that application EXISTS. A refusal that answers differently for a real
+ * application and for an invented one is an oracle, and a dictionary of names
+ * turns it into the whole inventory, one request at a time.
+ *
+ * So this response is a constant: same status, same headers, same body, for the
+ * cross-application catalogue, for an application the caller may not read, and
+ * for an application that does not exist at all. The writes may name the
+ * application because their refusal is an echo of the route, not a function of
+ * what exists — the distinction is what makes that safe.
  */
 function readDenied() {
   return NextResponse.json(
@@ -437,13 +443,13 @@ async function proxyEvaluate(
   joined: string,
   app: string,
 ) {
+  // Gated as a read, and refused with the read body — evaluate names no
+  // application that the caller did not put in the route, so it must not become
+  // a third place where that body is written by hand. Two copies of an
+  // anti-side-channel response is how the two stop matching.
   const allowed = await projectAccess.can(caller, "read", app);
-  if (!allowed) {
-    return NextResponse.json(
-      { title: "Forbidden", status: 403, code: "PROJECT_ACCESS_DENIED" },
-      { status: 403 },
-    );
-  }
+  if (!allowed) return readDenied();
+
   const body = await req.json().catch(() => null);
   let res: Response;
   try {
