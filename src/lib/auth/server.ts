@@ -16,15 +16,26 @@
  */
 import { createRemoteJWKSet, type JWTPayload, jwtVerify } from "jose";
 
-/** The caller, as derived from verified claims. Never from a constant. */
+/** The caller, as derived from a verified token. Never from a constant. */
 export interface VerifiedUser {
   /** Opaque IdP subject. Never PII. */
   sub: string;
-  /** Roles, read from PAP_OIDC_ROLES_CLAIM_PATH; absent claim → empty. */
-  roles: string[];
-  /** Projects this subject may administer, read from PAP_OIDC_APPS_CLAIM_PATH;
-   *  absent claim → empty, never "all". */
+  /**
+   * The applications the token carries, read from PAP_OIDC_APPS_CLAIM_PATH;
+   * absent claim → empty, never "all". ADVISORY: it feeds the application
+   * selector and decides nothing — the engine decides, per request.
+   */
   apps: string[];
+  /**
+   * The raw Bearer string whose signature, issuer, expiry and client were just
+   * checked — exactly what the caller presented, byte for byte. It is the
+   * credential the BFF forwards to the engine (lib/pdp/server.ts), which is how
+   * the engine comes to authorise the person rather than this console.
+   *
+   * Server-side only: no handler may serialise it into a response. The session
+   * route builds its payload field by field for that reason.
+   */
+  token: string;
 }
 
 /**
@@ -52,20 +63,19 @@ export class TokenError extends Error {
 interface AuthConfig {
   issuer: string;
   clientId: string;
-  rolesPath: string;
   appsPath: string;
 }
 
 /**
- * Where Keycloak puts these — NOT where "roles" and "apps" live.
+ * Where this deployment's IdP puts the caller's applications — NOT where
+ * "apps" live.
  *
- * They are defaults, not a contract: Auth0, Okta and Entra each put the same
+ * A default, not a contract: Auth0, Okta and Entra each put the same
  * information somewhere else, and a deployment on one of them must be a
  * config change, not a code change. Same discipline the PDP already holds
- * with `role-claim-path` and `mode = role | scope` (its ADR-013): the product
- * may not hardcode an IdP or a claim location.
+ * with its own claim mapping (its ADR-029): the product may not hardcode an
+ * IdP or a claim location.
  */
-const DEFAULT_ROLES_CLAIM_PATH = "realm_access.roles";
 const DEFAULT_APPS_CLAIM_PATH = "authz_apps";
 
 /**
@@ -75,10 +85,10 @@ const DEFAULT_APPS_CLAIM_PATH = "authz_apps";
  * matters is preserved either way — a blank issuer or client id NEVER degrades
  * to permissive, it raises `misconfigured`, and the route answers 500.
  *
- * The claim paths are the opposite case on purpose: blank means "use the
- * Keycloak default", never "misconfigured". Configuration nobody set must not
- * become a new way to fail — a deployment that never heard of these two
- * variables keeps behaving exactly as it did before they existed.
+ * The claim path is the opposite case on purpose: blank means "use the
+ * default", never "misconfigured". Configuration nobody set must not become a
+ * new way to fail — a deployment that never heard of this variable keeps
+ * behaving exactly as it did before it existed.
  */
 function authConfig(): AuthConfig {
   const issuer = process.env.PAP_OIDC_ISSUER?.trim();
@@ -92,7 +102,6 @@ function authConfig(): AuthConfig {
   return {
     issuer,
     clientId,
-    rolesPath: process.env.PAP_OIDC_ROLES_CLAIM_PATH?.trim() || DEFAULT_ROLES_CLAIM_PATH,
     appsPath: process.env.PAP_OIDC_APPS_CLAIM_PATH?.trim() || DEFAULT_APPS_CLAIM_PATH,
   };
 }
@@ -106,8 +115,8 @@ let keysFor: { issuer: string; resolver: Promise<KeyResolver> } | null = null;
 /**
  * One discovery round-trip per issuer, memoized. The memo holds the PROMISE so
  * concurrent first requests share a single fetch instead of racing — the same
- * in-flight discipline the service-account cache uses in lib/pdp/server.ts. A
- * failed discovery is evicted so the next request retries.
+ * usual in-flight discipline. A failed discovery is evicted so the next request
+ * retries.
  */
 function signingKeys(issuer: string): Promise<KeyResolver> {
   if (keysFor?.issuer !== issuer) {
@@ -198,9 +207,9 @@ function mintedForThisApp(payload: JWTPayload, clientId: string): boolean {
  *
  * Never a wildcard, never a partial guess, and deliberately NOT "wrap a lone
  * string in an array": a claim the deployment shaped wrong should be visibly
- * empty, not silently half-understood. Empty means denied — for `apps` because
- * the caller administers no project, and now equally for `roles`, which
- * HardcodedProjectAccessPolicy turns into a refusal. Fail closed.
+ * empty, not silently half-understood. Empty means an empty selector — it
+ * grants nothing and denies nothing, because this console decides nothing:
+ * the engine reads the same claim through its own mapping and decides there.
  */
 function stringsAt(payload: JWTPayload, path: string): string[] {
   const value = path
@@ -227,7 +236,7 @@ function stringsAt(payload: JWTPayload, path: string): string[] {
 export async function verifyCaller(req: {
   headers: { get(name: string): string | null };
 }): Promise<VerifiedUser> {
-  const { issuer, clientId, rolesPath, appsPath } = authConfig();
+  const { issuer, clientId, appsPath } = authConfig();
   const token = bearer(req);
   const keys = await signingKeys(issuer);
 
@@ -249,7 +258,7 @@ export async function verifyCaller(req: {
 
   return {
     sub: payload.sub,
-    roles: stringsAt(payload, rolesPath),
     apps: stringsAt(payload, appsPath),
+    token,
   };
 }

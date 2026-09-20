@@ -69,3 +69,31 @@ describe("LifecycleActions — optimistic concurrency (412)", () => {
     expect(screen.getByText("Recargar")).toBeInTheDocument();
   });
 });
+
+/*
+ * The person IS the token's subject (the BFF forwards their own token), so a
+ * write declares no one else: the body carries no `subject` (service-policy
+ * ADR-033 §4). The whole body is asserted, so the key cannot creep in.
+ */
+describe("LifecycleActions — writes as the person, declaring no one else", () => {
+  it("activates with exactly { version, changeReason } — no subject", async () => {
+    const captured: { body: unknown } = { body: null };
+    server.use(
+      http.post(
+        "/api/pdp/apps/records/policies/doc-access/activate",
+        async ({ request }) => {
+          captured.body = await request.json();
+          return HttpResponse.json({ ...HEAD, activeVersion: 2, revision: 4 });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    render(<LifecycleActions head={HEAD} versions={VERSIONS} onReload={() => {}} />);
+
+    await user.click(screen.getByText("Activar"));
+    await user.click(screen.getByText(/Poner v2 en producción/));
+
+    await waitFor(() => expect(captured.body).not.toBeNull());
+    expect(captured.body).toEqual({ version: 2, changeReason: "" });
+  });
+});

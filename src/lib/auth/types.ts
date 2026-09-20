@@ -12,9 +12,16 @@ export interface SessionUser {
   /** Opaque subject from the IdP. Never PII. */
   sub: string;
   name: string;
-  /** PAP-level roles (e.g. "pap-admin", "pap-editor"). NOT PDP markers. */
+  /**
+   * Roles decoded in the browser, for DISPLAY only. Nothing authorises on them:
+   * the PDP decides every request against the person's own token.
+   */
   roles: string[];
-  /** Projects this user may administer. Claim mapping lives in each adapter. */
+  /**
+   * Applications decoded in the browser. Claim mapping lives in each adapter.
+   * Display only — the application selector is fed by the server's
+   * `/api/session`, and even that list is advisory.
+   */
   apps: string[];
 }
 

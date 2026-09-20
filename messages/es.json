@@ -10,7 +10,6 @@
     "title": "Políticas",
     "count": "{count, plural, one {# política} other {# políticas}}",
     "newPolicy": "Nueva política",
-    "filterAll": "todas",
     "table": {
       "policy": "Política",
       "project": "Proyecto",
@@ -24,7 +23,11 @@
       "all": "Todas",
       "active": "Activas",
       "inactive": "Inactivas"
-    }
+    },
+    "emptyCrossApp": "No hay políticas que puedas leer.",
+    "pageOf": "Página {page} de {totalPages}",
+    "previousPage": "Anterior",
+    "nextPage": "Siguiente"
   },
   "status": {
     "active": "activa · v{version}",
@@ -159,9 +162,9 @@
     "policyDraftHint": "Pega un documento completo (un borrador, o el JSON de una versión guardada). No se guarda nada; el PDP lo valida como si lo crearas.",
     "invalidPolicyJson": "El documento de política no es JSON válido.",
     "policyNotDocument": "Pega el documento de política completo (policyId, resourceType, actions, rules…), no solo el arreglo de reglas.",
-    "actionFormat": "La acción debe tener el formato recurso:verbo (con dos puntos), p. ej. stepper:create.",
+    "actionFormat": "La acción debe ser un verbo, o recurso:verbo, sin espacios, p. ej. read o document:read.",
     "action": "Acción",
-    "actionHint": "recurso:verbo, p. ej. document:read",
+    "actionHint": "Un verbo, o recurso:verbo con el tipo de recurso como prefijo, p. ej. document:read",
     "resourceType": "Tipo de recurso",
     "resourceId": "Id del recurso",
     "optional": "Opcional",
@@ -173,13 +176,15 @@
     "subject": "Sujeto (delegado)",
     "subjectHint": "Vacío = pruebas como tú mismo; un sujeto distinto requiere el marcador de delegación.",
     "subjectPlaceholder": "p. ej. user-x",
+    "delegatedRefusal": "Rechazado. Esta petición nombra a otro sujeto, y actuar en nombre de otra persona requiere el marcador de delegación en tu token. Deja el sujeto vacío para probar como tú mismo.",
     "evaluate": "Evaluar",
     "evaluating": "Evaluando…",
     "permit": "PERMIT",
     "deny": "DENY",
     "policyVersion": "política v{version}",
     "decisionId": "id de decisión",
-    "invalidJsonIn": "JSON inválido en {field}."
+    "invalidJsonIn": "JSON inválido en {field}.",
+    "actionPrefixMismatch": "El prefijo de la acción ({prefix}) debe ser el tipo de recurso ({resourceType}), o omitirse."
   },
   "catalogue": {
     "title": "Vocabulario de acciones",
@@ -278,5 +283,12 @@
     "alreadyExists": "Esta app ya tiene configuración. Recárgala para editarla.",
     "invalidConfig": "El PDP rechazó la configuración:",
     "rejected": "{field}: {reason}"
+  },
+  "access": {
+    "forbidden": "No puedes administrar esta aplicación.",
+    "sessionEnded": "Tu sesión terminó. Cerrando sesión…",
+    "upstreamUnauthenticated": "El motor de políticas no aceptó tu sesión, aunque esta consola sí. Es una falla de configuración del despliegue (por ejemplo, al token le falta la audiencia del motor), no una sesión terminada. Avisa a quien opera esta consola.",
+    "selectorLabel": "Aplicaciones",
+    "allApplications": "Todas las aplicaciones"
   }
 }

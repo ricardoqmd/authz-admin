@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { Controller, type Resolver, useForm } from "react-hook-form";
-import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/pdp/client";
+import { useSessionApps } from "@/modules/access/api/session.queries";
+import { isRefusal, useDescribeError } from "@/modules/access/errors";
 import { CatalogueActionsField } from "@/modules/catalogue/CatalogueActionsField";
 import { Button, Card, Field, Input, Select } from "@/ui";
 import { useCreatePolicy } from "./api/policy.mutations";
@@ -27,7 +28,7 @@ import {
  * Error contract handling (RFC 9457):
  *   409 POLICY_ALREADY_EXISTS → inline error on policyId
  *   400/422 INVALID_POLICY    → invalidParams[] mapped onto the form
- *   403 PROJECT_ACCESS_DENIED → banner (no write access to that project)
+ *   403                       → the engine's refusal, one fixed sentence
  */
 export function CreatePolicyScreen() {
   const t = useTranslations("create");
@@ -35,7 +36,8 @@ export function CreatePolicyScreen() {
   const tDetail = useTranslations("detail");
   const tv = useTranslations("validation");
   const router = useRouter();
-  const { user } = useAuth();
+  const sessionApps = useSessionApps();
+  const describeError = useDescribeError();
   const create = useCreatePolicy();
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -70,8 +72,10 @@ export function CreatePolicyScreen() {
       });
       router.push(`/policies/${values.app}/${created.policyId}`);
     } catch (error) {
-      if (error instanceof ApiError && error.problem) {
-        const { code, detail, invalidParams } = error.problem;
+      // A refusal is read by its status alone, before any code: its body is
+      // not this screen's to interpret (modules/access/errors.ts).
+      if (error instanceof ApiError && error.problem && !isRefusal(error)) {
+        const { code, invalidParams } = error.problem;
         if (code === "POLICY_ALREADY_EXISTS") {
           setError("policyId", { message: t("duplicateId") });
         } else if (code === "INVALID_POLICY" && invalidParams?.length) {
@@ -81,10 +85,10 @@ export function CreatePolicyScreen() {
             setError(mapPdpField(param.field), { message: param.reason });
           }
         } else {
-          setBanner(detail ?? error.message);
+          setBanner(describeError(error));
         }
       } else {
-        setBanner((error as Error).message);
+        setBanner(describeError(error));
       }
     }
   }
@@ -140,12 +144,12 @@ export function CreatePolicyScreen() {
                     placeholder="records"
                     list="app-suggestions"
                   />
-                  {/* Catalog decision (handoff §5.1): the PDP has no app
-                      catalog by design; suggestions come from the session
-                      (apps the admin administers). Free text stays allowed —
-                      the enforcement seam rejects apps outside the scope. */}
+                  {/* Suggestions come from /api/session — the apps the
+                      verified token carries, which is advisory. Free text
+                      stays allowed: the engine decides, and its 403 renders
+                      in the banner. */}
                   <datalist id="app-suggestions">
-                    {(user?.apps ?? []).map((app) => (
+                    {sessionApps.map((app) => (
                       <option key={app} value={app} />
                     ))}
                   </datalist>

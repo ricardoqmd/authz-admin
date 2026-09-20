@@ -10,7 +10,6 @@
     "title": "Policies",
     "count": "{count, plural, one {# policy} other {# policies}}",
     "newPolicy": "New policy",
-    "filterAll": "all",
     "table": {
       "policy": "Policy",
       "project": "Project",
@@ -24,7 +23,11 @@
       "all": "All",
       "active": "Active",
       "inactive": "Inactive"
-    }
+    },
+    "emptyCrossApp": "No policies you may read.",
+    "pageOf": "Page {page} of {totalPages}",
+    "previousPage": "Previous",
+    "nextPage": "Next"
   },
   "status": {
     "active": "active · v{version}",
@@ -159,9 +162,9 @@
     "policyDraftHint": "Paste a full document (a draft, or a saved version's JSON). Nothing is saved; the PDP validates it as if you were creating it.",
     "invalidPolicyJson": "The policy document is not valid JSON.",
     "policyNotDocument": "Paste the full policy document (policyId, resourceType, actions, rules…), not just the rules array.",
-    "actionFormat": "The action must look like resource:verb (with a colon), e.g. stepper:create.",
+    "actionFormat": "The action must be a verb, or resource:verb, with no spaces, e.g. read or document:read.",
     "action": "Action",
-    "actionHint": "resource:verb, e.g. document:read",
+    "actionHint": "A verb, or resource:verb with the resource type as the prefix, e.g. document:read",
     "resourceType": "Resource type",
     "resourceId": "Resource id",
     "optional": "Optional",
@@ -173,13 +176,15 @@
     "subject": "Subject (delegated)",
     "subjectHint": "Leave empty to test as yourself; a different subject needs the delegation marker.",
     "subjectPlaceholder": "e.g. user-x",
+    "delegatedRefusal": "Refused. This request names another subject, and acting on someone else's behalf needs the delegation marker on your token. Leave the subject empty to test as yourself.",
     "evaluate": "Evaluate",
     "evaluating": "Evaluating…",
     "permit": "PERMIT",
     "deny": "DENY",
     "policyVersion": "policy v{version}",
     "decisionId": "decision id",
-    "invalidJsonIn": "Invalid JSON in {field}."
+    "invalidJsonIn": "Invalid JSON in {field}.",
+    "actionPrefixMismatch": "The action's prefix ({prefix}) must be the resource type ({resourceType}), or be left out."
   },
   "catalogue": {
     "title": "Action vocabulary",
@@ -278,5 +283,12 @@
     "alreadyExists": "This app already has a configuration. Reload to edit it.",
     "invalidConfig": "The PDP rejected the configuration:",
     "rejected": "{field}: {reason}"
+  },
+  "access": {
+    "forbidden": "You cannot administer this application.",
+    "sessionEnded": "Your session has ended. Signing you out…",
+    "upstreamUnauthenticated": "The policy engine did not accept your sign-in, although this console did. This is a deployment configuration fault (for example, the token lacks the engine's audience), not an ended session. Contact whoever runs this console.",
+    "selectorLabel": "Applications",
+    "allApplications": "All applications"
   }
 }

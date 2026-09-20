@@ -11,7 +11,7 @@ import type { AuthApi, SessionUser } from "../types";
 const MOCK_USER: SessionUser = {
   sub: "mock-admin",
   name: "Admin (mock)",
-  roles: ["pap-admin"],
+  roles: ["demo-operator"],
   apps: ["records", "billing"],
 };
 

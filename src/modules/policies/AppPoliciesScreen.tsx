@@ -4,35 +4,35 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AppSelector } from "@/modules/access/AppSelector";
-import { Button } from "@/ui";
-import { type StatusFilter, usePolicies } from "./api/policy.queries";
+import { Badge, Button } from "@/ui";
+import { type StatusFilter, useAppPolicies } from "./api/policy.queries";
 import { PolicyList } from "./components/PolicyList";
 
 /**
- * The cross-application view (GET /v1/policies) — every application at once.
- *
- * It arrives ALREADY SCOPED: the engine narrows it to the applications this
- * caller may read before it queries (service-policy ADR-033 §2). So an empty page
- * is a `200` and means "no rows you may read" — never "no applications exist",
- * which this console cannot know and must not suggest. Totals and pages are
- * rendered as given; nothing is re-counted, filtered or merged here.
+ * One application's policies. The application comes from the ROUTE
+ * (/policies/{app}) and nowhere else; the selector that leads here is fed by
+ * `/api/session`, and is advisory — whether this caller may read this
+ * application is the engine's answer, rendered in place when it is `403`.
  */
-export function PoliciesScreen() {
+export function AppPoliciesScreen({ app }: { app: string }) {
   const t = useTranslations("policies");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
-  const query = usePolicies(status, page);
+  const query = useAppPolicies(app, status, page);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{t("title")}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold">{t("title")}</h1>
+          <Badge>{app}</Badge>
+        </div>
         <Link href="/policies/new">
           <Button>{t("newPolicy")}</Button>
         </Link>
       </div>
 
-      <AppSelector allHref="/policies" />
+      <AppSelector current={app} allHref="/policies" />
 
       <PolicyList
         query={query}
@@ -42,7 +42,7 @@ export function PoliciesScreen() {
           setPage(1);
         }}
         onPage={setPage}
-        emptyText={t("emptyCrossApp")}
+        emptyText={t("empty")}
       />
     </div>
   );

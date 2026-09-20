@@ -9,14 +9,9 @@ import { readPublicConfig } from "./public";
  */
 const SERVER_ONLY = [
   "PDP_BASE_URL",
-  "PDP_TOKEN_URL",
-  "PDP_CLIENT_ID",
-  "PDP_CLIENT_SECRET",
-  "PDP_SERVICE_TOKEN",
   "PDP_TIMEOUT_MS",
   "PAP_OIDC_ISSUER",
   "PAP_OIDC_CLIENT_ID",
-  "PAP_OIDC_ROLES_CLAIM_PATH",
   "PAP_OIDC_APPS_CLAIM_PATH",
 ] as const;
 
@@ -108,6 +103,6 @@ describe("readPublicConfig", () => {
     // The positive control: a negative measurement proves nothing until the
     // instrument is shown capable of a positive. If the sentinels never reached
     // the environment, the loop above would pass against an empty world.
-    expect(process.env.PDP_CLIENT_SECRET).toBe(sentinel("PDP_CLIENT_SECRET"));
+    expect(process.env.PAP_OIDC_ISSUER).toBe(sentinel("PAP_OIDC_ISSUER"));
   });
 });

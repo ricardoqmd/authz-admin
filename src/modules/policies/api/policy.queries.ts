@@ -14,8 +14,10 @@ import type {
 export type StatusFilter = "all" | "active" | "inactive";
 
 /**
- * Cross-app catalog (R026: GET /v1/policies) — the supervision view. Same
- * path and filters as before R026; per-app work uses the nested routes below.
+ * Cross-app catalog (R026: GET /v1/policies) — the supervision view. The engine
+ * scopes it to the applications the caller may read BEFORE it queries
+ * (ADR-033 §2), so its page and its totals are already the caller's own: they
+ * are rendered as given, never re-counted or filtered here.
  */
 export function usePolicies(status: StatusFilter = "all", page = 1, size = 50) {
   const { getToken } = useAuth();
@@ -28,6 +30,31 @@ export function usePolicies(status: StatusFilter = "all", page = 1, size = 50) {
         `policies?page=${page}&size=${size}${statusParam}`,
         await getToken(),
       ),
+  });
+}
+
+/**
+ * One application's policies (GET /v1/apps/{app}/policies). The application is a
+ * ROUTE coordinate, taken from the screen's own route — never recovered from the
+ * cross-application listing.
+ */
+export function useAppPolicies(
+  app: string,
+  status: StatusFilter = "all",
+  page = 1,
+  size = 50,
+) {
+  const { getToken } = useAuth();
+  const statusParam = status === "all" ? "" : `&status=${status}`;
+  return useQuery({
+    // Under the "policies" prefix so every write's invalidation reaches it too.
+    queryKey: ["policies", "app", app, status, page, size],
+    queryFn: async () =>
+      apiGet<Paginated<PolicyHeadSummary>>(
+        `apps/${app}/policies?page=${page}&size=${size}${statusParam}`,
+        await getToken(),
+      ),
+    enabled: !!app,
   });
 }
 

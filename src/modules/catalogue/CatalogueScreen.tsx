@@ -6,7 +6,9 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ApiError } from "@/lib/pdp/client";
 import type { CatalogueEntry } from "@/lib/pdp/contracts";
-import { usePolicies } from "@/modules/policies/api/policy.queries";
+import { useSessionApps } from "@/modules/access/api/session.queries";
+import { isRefusal, useDescribeError } from "@/modules/access/errors";
+import { RequestError } from "@/modules/access/RequestError";
 import { Button, Card, Field, Input, Skeleton } from "@/ui";
 import {
   useCreateCatalogueEntry,
@@ -26,12 +28,9 @@ export function CatalogueScreen() {
   const params = useSearchParams();
   const [app, setApp] = useState(params.get("app") ?? "");
 
-  // Known apps for the datalist — derived from existing policies (a new app can
-  // still be typed by hand).
-  const policies = usePolicies();
-  const knownApps = Array.from(
-    new Set((policies.data?.data ?? []).map((p) => p.app)),
-  ).sort();
+  // Suggestions for the datalist come from /api/session — advisory; an app can
+  // still be typed by hand, and the engine decides either way.
+  const knownApps = useSessionApps();
 
   const catalogue = useCatalogue(app);
   const entries = catalogue.data?.data ?? [];
@@ -66,9 +65,10 @@ export function CatalogueScreen() {
       {!app ? (
         <p className="text-sm italic text-muted">{t("appEmpty")}</p>
       ) : catalogue.error ? (
-        <Card className="border-danger-bg text-sm text-danger">
-          {t("loadError", { message: (catalogue.error as Error).message })}
-        </Card>
+        <RequestError
+          error={catalogue.error}
+          other={(message) => t("loadError", { message })}
+        />
       ) : catalogue.isLoading ? (
         <Skeleton className="h-32" />
       ) : (
@@ -97,6 +97,13 @@ function ErrorNote({
   onReload?: () => void;
 }) {
   const t = useTranslations("catalogue");
+  const describeError = useDescribeError();
+  // A refusal is read by its status alone, before any code or field: its body
+  // is not this screen's to interpret (modules/access/errors.ts).
+  if (isRefusal(error)) {
+    return <p className="text-xs text-danger">{describeError(error)}</p>;
+  }
+
   const problem = error.problem;
   const policyIds = (problem?.policyIds as string[] | undefined) ?? [];
 
@@ -138,7 +145,7 @@ function ErrorNote({
     return <p className="text-xs text-danger">{t("alreadyExists")}</p>;
   }
 
-  return <p className="text-xs text-danger">{problem?.detail ?? error.message}</p>;
+  return <p className="text-xs text-danger">{describeError(error)}</p>;
 }
 
 function EntryCard({ app, entry }: { app: string; entry: CatalogueEntry }) {
