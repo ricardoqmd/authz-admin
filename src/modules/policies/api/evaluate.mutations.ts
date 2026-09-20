@@ -21,8 +21,8 @@ export function useEvaluate(app: string) {
 /**
  * Policy tester (dry-run, R027): POST /v1/apps/{app}/policies:simulate. Runs a
  * case against a hypothetical policy document (a draft, or a saved version's
- * content) WITHOUT persisting anything. Control-plane / authoring op — the BFF
- * gates it as write (mirrors the PDP's admin marker), same as create/edit.
+ * content) WITHOUT persisting anything. The engine authorises it; this console
+ * does not.
  */
 export function useSimulate(app: string) {
   const { getToken } = useAuth();

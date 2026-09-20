@@ -10,7 +10,6 @@
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
-import { projectAccess } from "@/lib/authz/project-access";
 import { server } from "@/test/msw/server";
 import { resetSigningKeyCache, TokenError, verifyCaller } from "./server";
 
@@ -46,7 +45,6 @@ async function mintToken(options: TokenOptions = {}) {
   return new SignJWT({
     azp: CLIENT_ID,
     aud: "account",
-    realm_access: { roles: ["pap-admin", "offline_access"] },
     authz_apps: ["records"],
     ...options.claims,
   })
@@ -81,24 +79,37 @@ beforeEach(async () => {
   resetSigningKeyCache();
   process.env.PAP_OIDC_ISSUER = ISSUER;
   process.env.PAP_OIDC_CLIENT_ID = CLIENT_ID;
-  // The claim-path variables stay UNSET for every test that does not name
-  // them: the default path is what the current deployment exercises, so it is
-  // what the bulk of this suite must exercise too. `delete`, not `= undefined`
-  // — assigning undefined to process.env stores the STRING "undefined".
-  delete process.env.PAP_OIDC_ROLES_CLAIM_PATH;
+  // The claim-path variable stays UNSET for every test that does not name it:
+  // the default path is what the current deployment exercises, so it is what
+  // the bulk of this suite must exercise too. `delete`, not `= undefined` —
+  // assigning undefined to process.env stores the STRING "undefined".
   delete process.env.PAP_OIDC_APPS_CLAIM_PATH;
   serveRealm(await exportJWK(realmKeys.publicKey));
 });
 
 describe("verifyCaller", () => {
-  it("accepts a valid token and maps sub, realm roles and authz_apps", async () => {
-    const user = await verifyCaller(requestWith(await mintToken()));
+  it("accepts a valid token and maps sub, authz_apps and the raw token", async () => {
+    const token = await mintToken();
 
+    const user = await verifyCaller(requestWith(token));
+
+    // `toEqual`: nothing else is derived — in particular no roles, which no
+    // code in this console reads any more.
     expect(user).toEqual({
       sub: "11111111-2222-3333-4444-555555555555",
-      roles: ["pap-admin", "offline_access"],
       apps: ["records"],
+      token,
     });
+  });
+
+  it("keeps the token exactly as presented — the string the BFF forwards", async () => {
+    const token = await mintToken();
+
+    const user = await verifyCaller(requestWith(token));
+
+    // Identity, not equivalence: the engine must receive the very signature this
+    // verifier checked, not a re-encoding of its claims.
+    expect(user.token).toBe(token);
   });
 
   it("rejects an expired token", async () => {
@@ -167,50 +178,15 @@ describe("verifyCaller", () => {
 });
 
 /*
- * The claim paths are configuration with Keycloak-shaped DEFAULTS, not a
- * contract. `realm_access.roles` is where Keycloak puts realm roles, not where
- * "roles" live — Auth0, Okta and Entra each put them somewhere else, and that
- * has to be a config change rather than a code change (the same rule the PDP
- * holds in its ADR-013).
+ * The apps claim path is configuration with a Keycloak-shaped DEFAULT, not a
+ * contract — Auth0, Okta and Entra each put the same information somewhere
+ * else, and that has to be a config change rather than a code change.
  */
-describe("configurable claim paths", () => {
-  it("reproduces today's behaviour when neither variable is set", async () => {
-    // The backwards-compatibility test: the current deployment sets neither.
+describe("configurable apps claim path", () => {
+  it("reproduces today's behaviour when the variable is not set", async () => {
     const user = await verifyCaller(requestWith(await mintToken()));
 
-    expect(user.roles).toEqual(["pap-admin", "offline_access"]);
     expect(user.apps).toEqual(["records"]);
-  });
-
-  it("reads roles from a custom nested path", async () => {
-    process.env.PAP_OIDC_ROLES_CLAIM_PATH = "authorization.claims.roles";
-    const token = await mintToken({
-      claims: {
-        realm_access: { roles: ["ignore-me"] },
-        authorization: { claims: { roles: ["pap-admin", "pap-editor"] } },
-      },
-    });
-
-    const user = await verifyCaller(requestWith(token));
-
-    // Three levels deep, and the Keycloak location is NOT consulted as a
-    // fallback: a configured path is the only answer, right or wrong.
-    expect(user.roles).toEqual(["pap-admin", "pap-editor"]);
-  });
-
-  it("cannot address a namespaced claim whose NAME contains dots", async () => {
-    // Known limitation of a dot-path, pinned so it is a decision and not a
-    // surprise: Auth0/Okta namespace custom claims as URLs, and every dot in
-    // the URL reads as a separator. See pap-001b report, risk 1.
-    process.env.PAP_OIDC_ROLES_CLAIM_PATH = "https://claims.example/roles";
-    const token = await mintToken({
-      claims: { "https://claims.example/roles": ["pap-admin"] },
-    });
-
-    const user = await verifyCaller(requestWith(token));
-
-    // Empty, not a throw and not a wrong guess — it denies, loudly and safely.
-    expect(user.roles).toEqual([]);
   });
 
   it("reads apps from a custom nested path", async () => {
@@ -224,26 +200,43 @@ describe("configurable claim paths", () => {
 
     const user = await verifyCaller(requestWith(token));
 
+    // Three levels deep, and the default location is NOT consulted as a
+    // fallback: a configured path is the only answer, right or wrong.
     expect(user.apps).toEqual(["records", "billing"]);
   });
 
+  it("cannot address a namespaced claim whose NAME contains dots", async () => {
+    // Known limitation of a dot-path, pinned so it is a decision and not a
+    // surprise: Auth0/Okta namespace custom claims as URLs, and every dot in
+    // the URL reads as a separator. See pap-001b report, risk 1.
+    process.env.PAP_OIDC_APPS_CLAIM_PATH = "https://claims.example/apps";
+    const token = await mintToken({
+      claims: { "https://claims.example/apps": ["records"] },
+    });
+
+    const user = await verifyCaller(requestWith(token));
+
+    // Empty, not a throw and not a wrong guess.
+    expect(user.apps).toEqual([]);
+  });
+
   it("yields an empty list when the path resolves to a non-array", async () => {
-    process.env.PAP_OIDC_ROLES_CLAIM_PATH = "scope";
+    process.env.PAP_OIDC_APPS_CLAIM_PATH = "scope";
     // A string, which is the shape a scope claim really has — the tempting
     // wrong answer is to wrap it; the right one is to refuse to guess.
     const token = await mintToken({ claims: { scope: "openid profile" } });
 
     const user = await verifyCaller(requestWith(token));
 
-    expect(user.roles).toEqual([]);
+    expect(user.apps).toEqual([]);
   });
 
   it("yields an empty list when a segment traverses a non-object", async () => {
-    process.env.PAP_OIDC_ROLES_CLAIM_PATH = "sub.roles.nested";
+    process.env.PAP_OIDC_APPS_CLAIM_PATH = "sub.apps.nested";
 
     const user = await verifyCaller(requestWith(await mintToken()));
 
-    expect(user.roles).toEqual([]);
+    expect(user.apps).toEqual([]);
   });
 
   it("yields an empty list for a path that does not exist at all", async () => {
@@ -256,71 +249,20 @@ describe("configurable claim paths", () => {
 
   it("keeps only the strings when the array is mixed", async () => {
     const token = await mintToken({
-      claims: { realm_access: { roles: ["pap-admin", 7, null, { nested: true }] } },
+      claims: { authz_apps: ["records", 7, null, { nested: true }] },
     });
 
     const user = await verifyCaller(requestWith(token));
 
-    expect(user.roles).toEqual(["pap-admin"]);
+    expect(user.apps).toEqual(["records"]);
   });
 
   it("treats a blank variable as the default, not as misconfiguration", async () => {
-    process.env.PAP_OIDC_ROLES_CLAIM_PATH = "   ";
+    process.env.PAP_OIDC_APPS_CLAIM_PATH = "   ";
 
     const user = await verifyCaller(requestWith(await mintToken()));
 
     // Blank must not become a new failure mode, and must not become [] either.
-    expect(user.roles).toEqual(["pap-admin", "offline_access"]);
-  });
-
-  it("gives a caller with no roles claim an empty list, which denies", async () => {
-    const token = await mintToken({
-      claims: { realm_access: undefined, authz_apps: undefined },
-    });
-
-    const user = await verifyCaller(requestWith(token));
-
-    expect(user.roles).toEqual([]);
-    // The consequence, asserted rather than assumed: verified is NOT
-    // authorized. Without pap-admin and without apps, the policy refuses.
-    await expect(projectAccess.can(user, "read", "records")).resolves.toBe(false);
-  });
-
-  it("denies an unlisted app when roles are missing but apps are not", async () => {
-    // The narrower true statement: losing the roles claim costs the caller the
-    // pap-admin shortcut, so access collapses to exactly their apps list.
-    const token = await mintToken({ claims: { realm_access: undefined } });
-
-    const user = await verifyCaller(requestWith(token));
-
-    await expect(projectAccess.can(user, "write", "billing")).resolves.toBe(false);
-    await expect(projectAccess.can(user, "write", "records")).resolves.toBe(true);
-  });
-});
-
-/*
- * The cross-app faculty (pap-002 §2) — the question `can(user, action, app)` could
- * not ask, and which the literal `"*"` stood in for.
- */
-describe("canReadAcrossApps", () => {
-  const scoped = { sub: "s", roles: ["pap-author"], apps: ["records", "billing"] };
-  const admin = { sub: "s", roles: ["pap-admin"], apps: [] };
-
-  it("grants an administrator", async () => {
-    await expect(projectAccess.canReadAcrossApps(admin)).resolves.toBe(true);
-  });
-
-  it("refuses a scoped caller however many apps they hold", async () => {
-    // Holding every app that happens to exist today is not the same statement as
-    // "may read the catalogue of what exists" — this is the second one.
-    await expect(projectAccess.canReadAcrossApps(scoped)).resolves.toBe(false);
-  });
-
-  it("is not can(...) with a placeholder: an admin with no apps still passes", async () => {
-    // Under the old `can(user, "read", "*")`, an admin passed only through the
-    // role shortcut and everyone else was compared against a literal that is not
-    // an app. The faculty is now the question, not a side effect of one.
-    await expect(projectAccess.can(admin, "read", "records")).resolves.toBe(true);
-    await expect(projectAccess.can(scoped, "read", "*")).resolves.toBe(false);
+    expect(user.apps).toEqual(["records"]);
   });
 });

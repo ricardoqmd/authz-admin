@@ -10,11 +10,43 @@ import type {
   PolicyDocument,
   SimulationRequest,
 } from "@/lib/pdp/contracts";
+import { useSession } from "@/modules/access/api/session.queries";
+import { isRefusal, useDescribeError } from "@/modules/access/errors";
 import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/ui";
 import { useEvaluate, useSimulate } from "./api/evaluate.mutations";
 import { usePolicy, usePolicyVersion, usePolicyVersions } from "./api/policy.queries";
 
 type Source = "active" | "draft";
+
+/** A verb, or `prefix:verb` — one colon at most, no whitespace, nothing blank. */
+const ACTION_SHAPE = /^(?:([^\s:]+):)?[^\s:]+$/;
+
+/**
+ * Check the composed action against the resource type it is asked about.
+ *
+ * The engine selects policies by the verb and, until service-policy ADR-036
+ * lands, ignores the prefix — so `document:read` asked of a `report` would be
+ * answered as `report:read`, a decision about a question nobody asked. ADR-036
+ * turns that disagreement into a `400`. This screen composes an action that
+ * agrees either way: its prefix equals the resource type, or it has none (a
+ * bare verb names no type and cannot contradict one). Literal comparison, as in
+ * the engine: no trimming inside, no case folding.
+ */
+export function checkAction(
+  action: string,
+  resourceType: string,
+):
+  | { ok: true }
+  | { ok: false; reason: "shape" }
+  | { ok: false; reason: "prefix"; prefix: string } {
+  const match = ACTION_SHAPE.exec(action);
+  if (!match) return { ok: false, reason: "shape" };
+  const prefix = match[1];
+  if (prefix !== undefined && prefix !== resourceType) {
+    return { ok: false, reason: "prefix", prefix };
+  }
+  return { ok: true };
+}
 
 /** Starter draft: a valid document (mirrors DEFAULT_RULES) the admin edits. */
 const DRAFT_SKELETON = JSON.stringify(
@@ -63,8 +95,26 @@ export function PolicyTesterScreen({
 }) {
   const t = useTranslations("tester");
   const tDetail = useTranslations("detail");
+  const describeError = useDescribeError();
   const evaluate = useEvaluate(app);
   const simulate = useSimulate(app);
+  /*
+   * The caller's own subject, as the verified session reports it. Two different
+   * things, kept apart, because the engine treats them differently
+   * (service-policy AuthContext, v0.6.1):
+   *  - a BLANK `sub` is not an identity. The engine falls back to
+   *    `preferred_username` when the subject is blank, so the string this screen
+   *    would compare the field against is not the one the engine resolves. Blank
+   *    is therefore NOT KNOWN, and an unknown own subject says nothing about
+   *    delegation — the rule below needs it defined.
+   *  - a `sub` that merely carries spaces IS known, and it is known WITH its
+   *    spaces. `callerSubject()` returns a non-blank `sub` verbatim and
+   *    `resolveEffectiveSubject` compares it with `equals`, neither side
+   *    trimmed. So the raw string is what the field is compared against here;
+   *    trimming is only how blank is recognised, never the identity.
+   */
+  const rawSubject = useSession().data?.sub;
+  const ownSubject = rawSubject?.trim() ? rawSubject : undefined;
 
   const scoped = Boolean(policyId);
   const pid = policyId ?? "";
@@ -135,17 +185,25 @@ export function PolicyTesterScreen({
     let request: EvaluationRequest;
     let policy: PolicyDocument | undefined;
     try {
-      // The engine reads the verb from a "resource:verb" action; a bare or
-      // hyphenated value (e.g. "stepper-create") selects nothing and comes back
-      // as "no applicable policy". Catch the shape here with a clear message.
+      // The action must agree with the resource type (see checkAction): caught
+      // here with a clear message, before the engine is asked anything.
       const trimmedAction = action.trim();
-      if (!/^[^\s:]+:[^\s:]+$/.test(trimmedAction)) {
-        throw new Error(t("actionFormat"));
+      const trimmedType = resourceType.trim();
+      const check = checkAction(trimmedAction, trimmedType);
+      if (!check.ok) {
+        throw new Error(
+          check.reason === "shape"
+            ? t("actionFormat")
+            : t("actionPrefixMismatch", {
+                prefix: check.prefix,
+                resourceType: trimmedType,
+              }),
+        );
       }
       request = {
         action: trimmedAction,
         resource: {
-          type: resourceType.trim(),
+          type: trimmedType,
           ...(resourceId.trim() ? { id: resourceId.trim() } : {}),
           ...(() => {
             const a = parseOptional(t("attributes"), attributes);
@@ -188,25 +246,49 @@ export function PolicyTesterScreen({
       return;
     }
 
+    // Whether a refusal of THIS request can be put down to delegation. The
+    // delegated sentence names a cause, so it is shown only where this screen can
+    // be right about it, and everything it needs is known here — from the
+    // request it built, never from the answer:
+    //  - the request goes to evaluate. Simulate runs the engine's control-plane
+    //    gate before it resolves the subject, so its refusal may mean "not your
+    //    application" whatever the field says.
+    //  - the field names a subject, and not the caller's own: the engine asks no
+    //    marker for that (service-policy AuthContext.resolveEffectiveSubject). The
+    //    caller's subject is the verified `sub` of /api/session; while it is not
+    //    known, the screen cannot tell, and says nothing about delegation.
+    // Anywhere else a refusal gets the generic sentence.
+    const simulating = source === "draft" && policy !== undefined;
+    const delegated =
+      !simulating &&
+      request.subject !== undefined &&
+      ownSubject !== undefined &&
+      request.subject !== ownSubject;
     try {
       const result =
-        source === "draft" && policy
+        simulating && policy
           ? await simulate.mutateAsync({ policy, request } satisfies SimulationRequest)
           : await evaluate.mutateAsync(request);
       setDecision(result);
     } catch (e) {
-      if (e instanceof ApiError && e.problem) {
-        setError(e.problem.detail ?? e.problem.title);
-        setErrorParams(e.problem.invalidParams ?? []);
-      } else {
-        setError((e as Error).message);
+      // A 400 — the engine's ADR-036 refusal included, whatever its code — is a
+      // validation failure like any other: its detail, and its invalidParams when
+      // it names fields. A 403 is a refusal, read by its status alone: nothing of
+      // its body is shown. When the refusal can be put down to delegation (the
+      // rule above), the screen says so — from what it sent, not what came back.
+      if (isRefusal(e)) {
+        setError(delegated ? t("delegatedRefusal") : describeError(e));
+        setErrorParams([]);
+        return;
       }
+      setError(describeError(e));
+      setErrorParams(e instanceof ApiError ? (e.problem?.invalidParams ?? []) : []);
     }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <Link href="/policies" className="text-sm text-muted hover:underline">
+      <Link href={`/policies/${app}`} className="text-sm text-muted hover:underline">
         ← {tDetail("back")}
       </Link>
       <div className="flex flex-wrap items-center gap-2">

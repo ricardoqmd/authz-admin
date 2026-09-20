@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, type Resolver, useForm } from "react-hook-form";
 import { ApiError } from "@/lib/pdp/client";
 import type { PolicyRule } from "@/lib/pdp/contracts";
+import { isRefusal, useDescribeError } from "@/modules/access/errors";
+import { RequestError } from "@/modules/access/RequestError";
 import { CatalogueActionsField } from "@/modules/catalogue/CatalogueActionsField";
 import { Button, Card, Field, Input, Select, Skeleton } from "@/ui";
 import { useAppendVersion } from "./api/policy.mutations";
@@ -29,6 +31,7 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
   const tLife = useTranslations("lifecycle");
   const tv = useTranslations("validation");
   const router = useRouter();
+  const describeError = useDescribeError();
 
   const head = usePolicy(app, policyId);
   const versions = usePolicyVersions(app, policyId);
@@ -92,8 +95,9 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
       if (error instanceof ApiError && error.status === 412) {
         setStale(true);
         setBanner(t("staleRevision"));
-      } else if (error instanceof ApiError && error.problem) {
-        const { code, detail, invalidParams } = error.problem;
+      } else if (error instanceof ApiError && error.problem && !isRefusal(error)) {
+        // A refusal is read by its status alone, before any code.
+        const { code, invalidParams } = error.problem;
         if (code === "INVALID_POLICY" && invalidParams?.length) {
           setBanner(tc("pdpRejected"));
           for (const p of invalidParams) {
@@ -103,15 +107,16 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
             else setError("rules", { message: p.reason });
           }
         } else {
-          setBanner(detail ?? error.message);
+          setBanner(describeError(error));
         }
       } else {
-        setBanner((error as Error).message);
+        setBanner(describeError(error));
       }
     }
   }
 
   const loading = head.isLoading || versions.isLoading || latest.isLoading;
+  const loadError = head.error ?? versions.error ?? latest.error;
 
   const rulesError =
     errors.rules?.message ??
@@ -163,7 +168,9 @@ export function EditPolicyScreen({ app, policyId }: { app: string; policyId: str
         </Card>
       )}
 
-      {loading ? (
+      {loadError ? (
+        <RequestError error={loadError} other={(message) => message} />
+      ) : loading ? (
         <Skeleton className="h-96" />
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} noValidate>

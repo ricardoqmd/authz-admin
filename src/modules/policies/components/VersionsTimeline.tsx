@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { PolicyVersionSummary } from "@/lib/pdp/contracts";
+import { useDescribeError } from "@/modules/access/errors";
 import { Badge, Card, Skeleton } from "@/ui";
 import { usePolicyVersion } from "../api/policy.queries";
 
@@ -55,6 +56,7 @@ function VersionItem({
 }) {
   const t = useTranslations("status");
   const tDetail = useTranslations("detail");
+  const describeError = useDescribeError();
   const [open, setOpen] = useState(false);
   // Lazy: the content is fetched only once the version is expanded (version
   // null → query disabled), so opening the page doesn't fan out N requests.
@@ -80,7 +82,7 @@ function VersionItem({
           (detail.isLoading || !detail.data ? (
             <Skeleton className="mt-2 h-24" />
           ) : detail.error ? (
-            <p className="mt-2 text-xs text-danger">{(detail.error as Error).message}</p>
+            <p className="mt-2 text-xs text-danger">{describeError(detail.error)}</p>
           ) : (
             <pre className="mt-2 overflow-x-auto rounded bg-neutral-bg p-3 text-xs">
               {JSON.stringify(detail.data, null, 2)}

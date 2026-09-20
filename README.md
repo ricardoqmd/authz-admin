@@ -5,16 +5,17 @@ PDP. This proof of concept covers the read surface (policy list, detail,
 version history), the write surface (create, new version, activate/deactivate,
 action catalogue and per-app configuration, all with the ETag/If-Match
 concurrency pattern), the policy tester against `/v1/evaluate`, and
-server-side verification of the caller's token in the BFF. One seam is still a
-stand-in for its target implementation: project-access enforcement runs on
-`HardcodedProjectAccessPolicy` rather than the PDP meta-policy.
+server-side verification of the caller's token in the BFF. Authorization is not
+decided here: the PDP decides every request, for the person who signed in.
 
 ## Architecture in one paragraph
 
 The browser never talks to the PDP. Every call goes through the **BFF**
-(Next.js route handlers under `src/app/api/pdp/`), which is the only holder
-of the PDP service credential and the single enforcement point
-(`ProjectAccessPolicy` — hardcoded now, PDP `/v1/evaluate` meta-policy later).
+(Next.js route handlers under `src/app/api/pdp/`), which verifies the caller's
+token and forwards **that same token** to the PDP. The BFF holds no credential
+of its own and makes no authorization decision: the PDP authorises the person
+per application, for reads and writes alike (its ADR-033), and the BFF returns
+the PDP's answer unchanged.
 UI components live behind the `src/ui` facade (owned, shadcn-style, tokens in
 `src/ui/tokens.css` aligned with the future Stencil DS). Auth is a facade too
 (`src/lib/auth`): a pluggable adapter port — mock for dev/tests,
@@ -26,9 +27,9 @@ src/
 ├── app/            # routes only (thin wrappers) + BFF route handlers
 ├── lib/
 │   ├── auth/       # auth facade (mock | keycloak)
-│   ├── authz/      # ProjectAccessPolicy — the model-D enforcement seam
 │   └── pdp/        # PDP contracts + server-side and browser-side clients
 ├── modules/
+│   ├── access/     # session, refusal rendering, application selector
 │   └── policies/   # feature: screens, queries, components
 └── ui/             # UI facade — the only import point for components
 ```
@@ -46,12 +47,13 @@ src/
 3. Configure and start the PAP:
 
    ```bash
-   cp .env.example .env        # paste a dev token into PDP_SERVICE_TOKEN
+   cp .env.example .env        # PAP_OIDC_* must name the realm you sign in with
    pnpm install
    pnpm dev                    # http://localhost:3000
    ```
 
-Tokens in dev: Quarkus Dev UI -> `http://localhost:8080/q/dev` -> OIDC.
+The PDP authorises the person who signs in, so their token must be one the PDP
+accepts: see `docs/deployment.md` for what it must carry.
 
 ## Deploy
 
@@ -72,8 +74,3 @@ docker run --rm -p 3000:3000 --env-file .env pap:$(git rev-parse --short HEAD)
 Contracts in `src/lib/pdp/contracts.ts` are hand-written from the documented
 REST contract. With the PDP running, regenerate full types from the live
 OpenAPI (`pnpm generate:pdp-types`, requires `pnpm add -D openapi-typescript`).
-
-## Planned
-
-- Meta-policy enforcement: seed `pap-project-access` + swap
-  `HardcodedProjectAccessPolicy` -> `EvaluateProjectAccessPolicy`.

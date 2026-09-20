@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ApiError } from "@/lib/pdp/client";
 import type { PolicyHeadView, PolicyVersionSummary } from "@/lib/pdp/contracts";
+import { useDescribeError } from "@/modules/access/errors";
 import { Button, Card, Field, Input, Select } from "@/ui";
 import { useActivatePolicy, useDeactivatePolicy } from "../api/policy.mutations";
 
@@ -68,16 +69,14 @@ export function LifecycleActions({
 /** Shared inline banner for the 412 stale-revision case. */
 function useStaleGuard() {
   const t = useTranslations("lifecycle");
+  const describeError = useDescribeError();
   const [stale, setStale] = useState(false);
   function handle(error: unknown): string | null {
     if (error instanceof ApiError && error.status === 412) {
       setStale(true);
       return t("staleRevision");
     }
-    if (error instanceof ApiError && error.problem) {
-      return error.problem.detail ?? error.problem.title;
-    }
-    return (error as Error).message;
+    return describeError(error);
   }
   return { stale, setStale, handle };
 }

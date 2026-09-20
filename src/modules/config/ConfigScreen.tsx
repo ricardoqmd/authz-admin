@@ -5,7 +5,9 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ApiError } from "@/lib/pdp/client";
 import type { AppConfig, AppConfigWrite } from "@/lib/pdp/contracts";
-import { usePolicies } from "@/modules/policies/api/policy.queries";
+import { useSessionApps } from "@/modules/access/api/session.queries";
+import { isRefusal, useDescribeError } from "@/modules/access/errors";
+import { RequestError } from "@/modules/access/RequestError";
 import { Button, Card, Field, Input, Skeleton } from "@/ui";
 import {
   useCreateAppConfig,
@@ -27,10 +29,8 @@ export function ConfigScreen() {
   const [app, setApp] = useState(params.get("app") ?? "");
   const [creating, setCreating] = useState(false);
 
-  const policies = usePolicies();
-  const knownApps = Array.from(
-    new Set((policies.data?.data ?? []).map((p) => p.app)),
-  ).sort();
+  // Suggestions from /api/session — advisory; the engine decides either way.
+  const knownApps = useSessionApps();
 
   const config = useAppConfig(app);
   const is404 = config.error instanceof ApiError && config.error.status === 404;
@@ -87,9 +87,10 @@ export function ConfigScreen() {
           <NoConfig app={app} onCreate={() => setCreating(true)} />
         )
       ) : (
-        <Card className="border-danger-bg text-sm text-danger">
-          {t("loadError", { message: (config.error as Error).message })}
-        </Card>
+        <RequestError
+          error={config.error}
+          other={(message) => t("loadError", { message })}
+        />
       )}
     </div>
   );
@@ -163,6 +164,7 @@ function ConfigEditor({
   const [banner, setBanner] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const describeError = useDescribeError();
 
   const create = useCreateAppConfig(app);
   const replace = useReplaceAppConfig(app);
@@ -229,7 +231,10 @@ function ConfigEditor({
   }
 
   function handleError(error: unknown) {
-    if (error instanceof ApiError && error.status === 412) {
+    // A refusal is read by its status alone, before any code.
+    if (isRefusal(error)) {
+      setBanner(describeError(error));
+    } else if (error instanceof ApiError && error.status === 412) {
       setStale(true);
       setBanner(t("stale"));
     } else if (
@@ -245,7 +250,7 @@ function ConfigEditor({
       setServerParams(error.problem.invalidParams);
       setBanner(t("invalidConfig"));
     } else {
-      setBanner(error instanceof Error ? error.message : String(error));
+      setBanner(describeError(error));
     }
   }
 

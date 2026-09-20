@@ -1,6 +1,14 @@
 /*
  * Browser-side client. Talks ONLY to the PAP BFF (/api/pdp/*) — never to the
- * PDP directly. Sends the user's token so the BFF can validate and enforce.
+ * PDP directly. Sends the user's token: the BFF verifies it and forwards it,
+ * and the PDP authorises the person it names.
+ *
+ * No write body carries `subject`. The engine accepts that field to record that
+ * a write was made on behalf of someone other than the caller (service-policy
+ * ADR-033 §4). Here the person IS the token's subject — the BFF forwards their
+ * own token — so there is no one else to declare, and the audit records the
+ * acting identity as verified rather than declared. Omitting it is the
+ * decision, not an oversight.
  */
 import { isProblem, type Problem } from "./contracts";
 

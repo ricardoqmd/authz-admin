@@ -22,6 +22,27 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "XMLHttpRequest": "Requests to the engine go through lib/pdp/client. src/modules/access/refusal.test.tsx enumerates apiGet/apiPost/apiPut/apiDelete calls and the word fetch; a request made this way is not read at all.",
+                  "EventSource": "Requests to the engine go through lib/pdp/client. src/modules/access/refusal.test.tsx enumerates apiGet/apiPost/apiPut/apiDelete calls and the word fetch; a request made this way is not read at all.",
+                  "navigator": "navigator.sendBeacon can post to the engine, and no reading of the source enumerates it. A request belongs in lib/pdp/client; another use of navigator belongs in a file the browser code calls, with the reason."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": { "source": { "organizeImports": "on" } }

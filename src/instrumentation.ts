@@ -28,6 +28,21 @@ const RETIRED: ReadonlyArray<readonly [retired: string, replacement: string]> = 
 ];
 
 /**
+ * Names that were removed outright, with nothing to rename them to: the BFF's
+ * own credential toward the PDP, and the roles claim only the removed
+ * console-side gate read. The BFF now forwards the signed-in person's token, so
+ * a value left here — a client secret among them — is kept in the environment
+ * for nothing, and nothing else would say so.
+ */
+const REMOVED = [
+  "PDP_TOKEN_URL",
+  "PDP_CLIENT_ID",
+  "PDP_CLIENT_SECRET",
+  "PDP_SERVICE_TOKEN",
+  "PAP_OIDC_ROLES_CLAIM_PATH",
+];
+
+/**
  * Required only when the build compiled the adapter that needs them. A demo
  * image built with the mock has no IdP to point at, and an unconditional check
  * would stop it from starting at all.
@@ -51,6 +66,16 @@ export async function register() {
       console.warn(
         `[pap] ${retired} is set and is no longer read. It was renamed to ` +
           `${replacement}; the value you set is being ignored.`,
+      );
+    }
+  }
+
+  for (const removed of REMOVED) {
+    if (process.env[removed]) {
+      console.warn(
+        `[pap] ${removed} is set and is no longer read: the BFF forwards the ` +
+          `signed-in person's token to the PDP and holds no credential of its ` +
+          `own. Remove it from the environment.`,
       );
     }
   }

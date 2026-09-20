@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { RequestError } from "@/modules/access/RequestError";
 import { Badge, Card, Skeleton } from "@/ui";
 import { usePolicy, usePolicyVersions } from "./api/policy.queries";
 import { LifecycleActions } from "./components/LifecycleActions";
@@ -19,16 +20,12 @@ export function PolicyDetailScreen({ app, policyId }: { app: string; policyId: s
   const versions = usePolicyVersions(app, policyId);
 
   if (head.error) {
-    return (
-      <Card className="border-danger-bg text-danger">
-        {(head.error as Error).message}
-      </Card>
-    );
+    return <RequestError error={head.error} other={(message) => message} />;
   }
 
   return (
     <div className="space-y-4">
-      <Link href="/policies" className="text-sm text-muted hover:underline">
+      <Link href={`/policies/${app}`} className="text-sm text-muted hover:underline">
         ← {t("back")}
       </Link>
 

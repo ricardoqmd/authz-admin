@@ -22,9 +22,9 @@
  *
  * Only values that are public by nature belong in this object. It is
  * serialised into the HTML the server sends, so a secret placed here is a
- * secret published. Server-only settings — the PDP base URL, the BFF's own
- * credential, the issuer it verifies against — are read where they are used
- * and never travel through this bag.
+ * secret published. Server-only settings — the PDP base URL, the issuer the
+ * BFF verifies callers against — are read where they are used and never
+ * travel through this bag.
  */
 
 /**

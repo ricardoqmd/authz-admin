@@ -111,22 +111,45 @@ It deliberately does **not** reach the PDP. A console that cannot reach the PDP
 still has to come up and say so on screen; a probe that failed for that reason
 would take the console down as well, turning one outage into two.
 
-## What a deployment today serves, and what it does not
+## Who authorises, and what the person's token must carry
 
 Read this before announcing the console to anyone.
 
-Every read is authorised against the application in its own route, and the
-cross-application listing answers `403` to a caller without the platform role.
-Nothing in the UI consumes `/api/session` yet, and **three** screens still query
-the cross-application collection: the policy list, which is the one that breaks,
-plus the catalogue and configuration screens, which call it only to suggest known
-applications and therefore degrade to an empty list rather than failing.
+The console decides no authorization. The BFF verifies the caller's token and
+forwards **that same token** to the PDP, which authorises the person per
+application (service-policy ADR-033). A `403` from the PDP is shown as "you
+cannot administer this application". Only the BFF's own `401` ends the session;
+a `401` that comes from the PDP — a token the BFF accepted and the PDP did not,
+typically one missing the PDP's audience — is shown as a deployment fault and
+signs no one out.
 
-**A deployment today therefore serves platform administrators.** Per-application
-administrators can be authorised by the API but will not get a usable screen
-until the listing takes its application from the route. That is acceptable while
-the console is operated by the platform team; it is not acceptable to announce to
-per-application administrators.
+So the token a person signs in with must be accepted by the PDP as well as by
+the BFF. That is identity-provider configuration, outside this repository:
+
+- **Issuer** — the PDP's configured realm (`QUARKUS_OIDC_AUTH_SERVER_URL`) must be
+  the same issuer as `PAP_OIDC_ISSUER`.
+- **Audience** — the token's `aud` must include the PDP's audience
+  (`QUARKUS_OIDC_TOKEN_AUDIENCE`); the BFF separately requires this console's
+  client in `azp` or `aud`.
+- **Applications** — the claim the PDP's control-plane mapping names (stored in
+  its reserved application's configuration) must list the applications the
+  person administers. Point `PAP_OIDC_APPS_CLAIM_PATH` at the same claim: the BFF
+  reads it only to fill the application selector.
+- **Editing the control plane itself** — the PDP's reserved application is
+  administered like any other, by the people whose applications claim lists its
+  id. Two restrictions hold even for them: its configuration can be replaced
+  but never created or deleted, and a replacement must still give the person
+  making it the reserved application (the PDP refuses a change that would lock
+  its author out).
+- **Delegation role** — only when the tester's *subject* field names someone
+  other than the signed-in person. Asking the PDP about another subject, in
+  either of the tester's modes, needs its delegation marker on the token;
+  leaving the field empty, or naming yourself, does not. Without the marker that
+  request is refused, and the tester says why.
+
+The selector is fed by `/api/session`, and the policy list takes its application
+from the route; the cross-application view shows only what the PDP lets the
+person read, so an empty page there means "nothing you may read".
 
 ## A gap this test suite does not close
 

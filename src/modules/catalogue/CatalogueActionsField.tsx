@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { ApiError } from "@/lib/pdp/client";
+import { isRefusal } from "@/modules/access/errors";
 import { Input } from "@/ui";
 import { useCatalogueEntry } from "./api/catalogue.queries";
 
@@ -29,6 +30,7 @@ export function CatalogueActionsField({
   onChange: (next: string) => void;
 }) {
   const t = useTranslations("catalogueActions");
+  const tAccess = useTranslations("access");
   const entry = useCatalogueEntry(app.trim(), resourceType.trim());
 
   if (!app.trim() || !resourceType.trim()) {
@@ -52,6 +54,12 @@ export function CatalogueActionsField({
         </Link>
       </div>
     );
+  }
+
+  // The engine refused the read: say so in the one fixed sentence, rather than
+  // offering free text for a write it will refuse the same way.
+  if (isRefusal(entry.error)) {
+    return <p className="text-xs text-danger">{tAccess("forbidden")}</p>;
   }
 
   // Any other read failure: don't block authoring — fall back to free text.

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
+import { SessionGuard } from "@/modules/access/SessionGuard";
 import { Badge, cn } from "@/ui";
 import { LocaleSwitcher } from "./_shell/LocaleSwitcher";
 
@@ -34,6 +35,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/* The BFF's own 401 ends the session; the engine's 401 and any 403 never do. */}
+      <SessionGuard />
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-5">
