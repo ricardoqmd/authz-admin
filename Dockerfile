@@ -5,8 +5,14 @@
 # (src/lib/config/public.ts) and the server's own settings come from the
 # container's environment. See docs/deployment.md.
 
+# The registry the base image comes from. The default is Docker Hub, so a plain
+# clone builds exactly as before; a build that must pull through a mirror or a
+# proxy cache passes that prefix instead. Declared before the first FROM so all
+# three stages can use it.
+ARG BASE_REGISTRY=docker.io/library
+
 # ---------- dependencies ----------
-FROM node:22-alpine AS deps
+FROM ${BASE_REGISTRY}/node:22-alpine AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9 --activate
 # Only the manifests, so this layer is reused whenever sources change but
@@ -15,7 +21,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ---------- build ----------
-FROM node:22-alpine AS build
+FROM ${BASE_REGISTRY}/node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY --from=deps /app/node_modules ./node_modules
@@ -38,7 +44,7 @@ ENV NEXT_PUBLIC_AUTH_ADAPTER=${NEXT_PUBLIC_AUTH_ADAPTER} \
 RUN pnpm build
 
 # ---------- runtime ----------
-FROM node:22-alpine AS runner
+FROM ${BASE_REGISTRY}/node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
